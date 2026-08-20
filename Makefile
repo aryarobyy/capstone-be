@@ -1,8 +1,13 @@
-.PHONY: run build tidy clean
+.PHONY: run dev build tidy clean
 
 # Run the backend application
 run:
 	go run cmd/api/main.go
+
+# Run with hot reload (Air)
+dev:
+	air
+
 
 # Build executable binary
 build:
