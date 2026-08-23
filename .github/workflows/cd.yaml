@@ -37,7 +37,7 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           key: ${{ secrets.SSH_KEY }}
           source: "app"
-          target: "/home/${{ secrets.USERNAME }}/app"
+          target: "/home/${{ secrets.USERNAME }}/app/capstone-be"
           
       - name: Restart service
         uses: appleboy/ssh-action@v1.0.3
@@ -47,4 +47,4 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            sudo systemctl restart myapp
+            sudo systemctl restart capstone-be
