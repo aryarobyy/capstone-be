@@ -19,13 +19,11 @@ import (
 )
 
 func main() {
-	// 1. Load Configurations
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configurations: %v", err)
 	}
 
-	// 2. Initialize Database Connection
 	db, err := database.InitDB(cfg)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
@@ -39,33 +37,26 @@ func main() {
 		}()
 	}
 
-	// 3. Set Gin mode
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 4. Setup Router and Middlewares
 	r := gin.New()
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
 
-	// 5. Setup Route Groups
 	apiGroup := r.Group("/api")
-	v1Group := apiGroup.Group("/v1")
 
-	// 6. Register Module Routes
-	health.RegisterRoutes(v1Group, db)
-	user.RegisterRoutes(v1Group, db)
+	health.RegisterRoutes(apiGroup, db)
+	user.RegisterRoutes(apiGroup, db)
 
-	// 7. Setup Server & Graceful Shutdown
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{
 		Addr:    serverAddr,
 		Handler: r,
 	}
 
-	// Start server in a goroutine
 	go func() {
 		log.Printf("Server running on port %s in %s mode\n", cfg.Port, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -73,13 +64,11 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
 
-	// Allow server 5 seconds to finish active connections
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
