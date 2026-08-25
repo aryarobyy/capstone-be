@@ -19,19 +19,25 @@ capstone-be/
 │   │   ├── logger.go
 │   │   └── recovery.go
 │   ├── modules/                 # Modular domain features
-│   │   ├── health/              # Healthcheck Module (Example 1)
+│   │   ├── health/              # Healthcheck Module
 │   │   │   ├── handler.go
 │   │   │   └── router.go
-│   │   └── user/                # User Module (Example 2: Full CRUD)
+│   │   ├── auth/                # Auth Module (Register, Login)
+│   │   │   ├── dto.go           # Request & Response structs
+│   │   │   ├── entity.go        # Domain model
+│   │   │   ├── handler.go       # HTTP controllers
+│   │   │   ├── repository.go    # Data Access Layer
+│   │   │   ├── service.go       # Business Logic Layer
+│   │   │   └── router.go        # Module routes mapping
+│   │   └── user/                # User Module (Profile & User CRUD)
 │   │       ├── dto.go           # Request & Response structs
 │   │       ├── entity.go        # Domain model
 │   │       ├── handler.go       # HTTP controllers
-│   │       ├── repository.go    # Data Access Layer (raw SQL with database/sql)
+│   │       ├── repository.go    # Data Access Layer
 │   │       ├── service.go       # Business Logic Layer
 │   │       └── router.go        # Module routes mapping
-│   └── pkg/                     # Standardized helpers
-│       └── response/            # Unified API JSON responses
-│           └── response.go
+│   └── utils/                   # Standardized helpers & response handler
+│       └── response_handler.go
 ├── .env.example                 # Config template
 ├── .gitignore                   # Standard Go Gitignore
 ├── go.mod                       # Go modules configuration
@@ -83,14 +89,17 @@ Or using raw Go commands:
 ## API Endpoints
 
 ### Health Check
-- `GET /api/v1/health` - Checks server and database connectivity status.
+- `GET /api/health` - Checks server and database connectivity status.
+
+### Authentication
+- `POST /api/auth/register` - Register a new user account.
+- `POST /api/auth/login` - Authenticate user credentials.
 
 ### Users
-- `POST /api/v1/users` - Register a new user.
-- `GET /api/v1/users` - Retrieve all users.
-- `GET /api/v1/users/:id` - Retrieve a user by ID.
-- `PUT /api/v1/users/:id` - Update user details.
-- `DELETE /api/v1/users/:id` - Delete a user.
+- `GET /api/users` - Retrieve all users.
+- `GET /api/users/:id` - Retrieve a user by ID.
+- `PUT /api/users/:id` - Update user details.
+- `DELETE /api/users/:id` - Delete a user.
 
 ### Database Table Schema (Users)
 

@@ -18,26 +18,6 @@ func NewUserHandler(service UserService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
-func (h *UserHandler) Register(c *gin.Context) {
-	var req CreateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.JSONError(c, http.StatusBadRequest, "Invalid request body", err.Error())
-		return
-	}
-
-	res, err := h.service.Register(c.Request.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrEmailAlreadyExists) {
-			responsehandler.JSONError(c, http.StatusConflict, err.Error(), nil)
-			return
-		}
-		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to register user", err)
-		return
-	}
-
-	responsehandler.JSONSuccess(c, http.StatusCreated, "User registered successfully", res)
-}
-
 func (h *UserHandler) GetByID(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -52,7 +32,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 			responsehandler.JSONError(c, http.StatusNotFound, err.Error(), nil)
 			return
 		}
-		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to retrieve user", err)
+		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to retrieve user", err.Error())
 		return
 	}
 
@@ -62,7 +42,7 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 func (h *UserHandler) GetAll(c *gin.Context) {
 	res, err := h.service.GetAll(c.Request.Context())
 	if err != nil {
-		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to retrieve users", err)
+		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to retrieve users", err.Error())
 		return
 	}
 
@@ -93,7 +73,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 			responsehandler.JSONError(c, http.StatusConflict, err.Error(), nil)
 			return
 		}
-		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to update user", err)
+		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to update user", err.Error())
 		return
 	}
 
@@ -114,7 +94,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 			responsehandler.JSONError(c, http.StatusNotFound, err.Error(), nil)
 			return
 		}
-		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to delete user", err)
+		responsehandler.JSONError(c, http.StatusInternalServerError, "Failed to delete user", err.Error())
 		return
 	}
 

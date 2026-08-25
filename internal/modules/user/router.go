@@ -10,10 +10,8 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 	repo := NewUserRepository(db)
 	service := NewUserService(repo)
 	handler := NewUserHandler(service)
-
-	userGroup := router.Group("/users")
+	userGroup := router.Group("/user")
 	{
-		userGroup.POST("", handler.Register)
 		userGroup.GET("", handler.GetAll)
 		userGroup.GET("/:id", handler.GetByID)
 		userGroup.PUT("/:id", handler.Update)

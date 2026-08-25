@@ -14,7 +14,6 @@ var (
 )
 
 type UserRepository interface {
-	Create(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id int64) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetAll(ctx context.Context) ([]User, error)
@@ -28,25 +27,6 @@ type postgresUserRepository struct {
 
 func NewUserRepository(db *sql.DB) UserRepository {
 	return &postgresUserRepository{db: db}
-}
-
-func (r *postgresUserRepository) Create(ctx context.Context, u *User) error {
-	query := `
-		INSERT INTO users (name, email, password, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`
-	u.CreatedAt = time.Now()
-	u.UpdatedAt = time.Now()
-
-	err := r.db.QueryRowContext(ctx, query, u.Name, u.Email, u.Password, u.CreatedAt, u.UpdatedAt).Scan(&u.ID)
-	if err != nil {
-		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
-			return ErrEmailAlreadyExists
-		}
-		return err
-	}
-	return nil
 }
 
 func (r *postgresUserRepository) GetByID(ctx context.Context, id int64) (*User, error) {

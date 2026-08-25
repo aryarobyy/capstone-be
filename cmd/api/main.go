@@ -12,6 +12,7 @@ import (
 	"capstone-be/config"
 	"capstone-be/internal/database"
 	"capstone-be/internal/middleware"
+	"capstone-be/internal/modules/auth"
 	"capstone-be/internal/modules/health"
 	"capstone-be/internal/modules/user"
 
@@ -49,6 +50,7 @@ func main() {
 	apiGroup := r.Group("/api")
 
 	health.RegisterRoutes(apiGroup, db)
+	auth.RegisterRoutes(apiGroup, db)
 	user.RegisterRoutes(apiGroup, db)
 
 	serverAddr := ":" + cfg.Port

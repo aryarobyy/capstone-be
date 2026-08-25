@@ -2,12 +2,9 @@ package user
 
 import (
 	"context"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService interface {
-	Register(ctx context.Context, req CreateUserRequest) (*UserResponse, error)
 	GetByID(ctx context.Context, id int64) (*UserResponse, error)
 	GetAll(ctx context.Context) ([]UserResponse, error)
 	Update(ctx context.Context, id int64, req UpdateUserRequest) (*UserResponse, error)
@@ -20,25 +17,6 @@ type userService struct {
 
 func NewUserService(repo UserRepository) UserService {
 	return &userService{repo: repo}
-}
-
-func (s *userService) Register(ctx context.Context, req CreateUserRequest) (*UserResponse, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
-	u := &User{
-		Name:     req.Name,
-		Email:    req.Email,
-		Password: string(hashedPassword),
-	}
-
-	if err := s.repo.Create(ctx, u); err != nil {
-		return nil, err
-	}
-
-	return ToUserResponse(u), nil
 }
 
 func (s *userService) GetByID(ctx context.Context, id int64) (*UserResponse, error) {
