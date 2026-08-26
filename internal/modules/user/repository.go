@@ -16,7 +16,7 @@ var (
 type UserRepository interface {
 	Detail(ctx context.Context, req UserDetailRequest) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	List(ctx context.Context, req ListUserRequest) ([]User, error)
+	List(ctx context.Context, limit, index int) ([]User, int, error)
 	Update(ctx context.Context, req UpdateUserRequest) error
 	Delete(ctx context.Context, req DeleteUserRequest) error
 }
@@ -67,15 +67,21 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*User, e
 	return &u, nil
 }
 
-func (r *userRepository) List(ctx context.Context, req ListUserRequest) ([]User, error) {
+func (r *userRepository) List(ctx context.Context, limit, index int) ([]User, int, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		return nil, 0, err
+	}
+
 	query := `
 		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
 		ORDER BY id DESC
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.QueryContext(ctx, query)
+	rows, err := r.db.QueryContext(ctx, query, limit, index)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
@@ -84,23 +90,23 @@ func (r *userRepository) List(ctx context.Context, req ListUserRequest) ([]User,
 		var u User
 		err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Msisdn, &u.Password, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		users = append(users, u)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return users, nil
+	return users, count, nil
 }
 
 func (r *userRepository) Update(ctx context.Context, req UpdateUserRequest) error {
 	query := `
 		UPDATE users
 		SET name = COALESCE(NULLIF($1, ''), name), 
-		    email = COALESCE(NULLIF($2, ''), email), 
-		    msisdn = COALESCE(NULLIF($3, ''), msisdn),
-		    updated_at = $4
+			email = COALESCE(NULLIF($2, ''), email), 
+			msisdn = COALESCE(NULLIF($3, ''), msisdn),
+			updated_at = $4
 		WHERE id = $5
 	`
 	updatedAt := time.Now()

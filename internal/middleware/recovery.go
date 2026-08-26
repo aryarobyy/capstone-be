@@ -17,7 +17,7 @@ func Recovery() gin.HandlerFunc {
 			if err := recover(); err != nil {
 				log.Printf("[PANIC RECOVERY] err: %v\nstack:\n%s", err, string(debug.Stack()))
 
-				responsehandler.JSONError(
+				responsehandler.ToErrorHandler(
 					c,
 					http.StatusInternalServerError,
 					"Internal Server Error",

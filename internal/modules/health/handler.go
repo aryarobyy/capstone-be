@@ -38,9 +38,9 @@ func (h *HealthHandler) Check(c *gin.Context) {
 	statusCode := http.StatusOK
 	if status == "DEGRADED" {
 		statusCode = http.StatusServiceUnavailable
-		responsehandler.JSONError(c, statusCode, "System is degraded", data)
+		responsehandler.ToErrorHandler(c, statusCode, "System is degraded", data)
 		return
 	}
 
-	responsehandler.JSONSuccess(c, statusCode, "System is healthy", data)
+	responsehandler.ToSuccessHandler(c, statusCode, "System is healthy", data)
 }

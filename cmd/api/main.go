@@ -14,6 +14,8 @@ import (
 	"capstone-be/internal/middleware"
 	"capstone-be/internal/modules/auth"
 	"capstone-be/internal/modules/health"
+	"capstone-be/internal/modules/history"
+	"capstone-be/internal/modules/sensor"
 	"capstone-be/internal/modules/user"
 
 	"github.com/gin-gonic/gin"
@@ -52,6 +54,8 @@ func main() {
 	health.RegisterRoutes(apiGroup, db)
 	auth.RegisterRoutes(apiGroup, db)
 	user.RegisterRoutes(apiGroup, db)
+	history.RegisterRoutes(apiGroup, db)
+	sensor.RegisterRoutes(apiGroup, db)
 
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{

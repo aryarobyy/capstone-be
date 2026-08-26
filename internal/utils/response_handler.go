@@ -4,11 +4,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-	Errors  interface{} `json:"errors,omitempty"`
+type SuccessResponse[T any] struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Data    T      `json:"data,omitempty"`
+}
+
+type ErrorResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Errors  any    `json:"errors,omitempty"`
+}
+
+type ListResponse[T any] struct {
+	List  []T `json:"list"`
+	Count int `json:"count"`
+	Index int `json:"index"`
+	Limit int `json:"limit"`
 }
 
 type Pagination struct {
@@ -18,35 +30,35 @@ type Pagination struct {
 	TotalData   int64 `json:"total_data"`
 }
 
-type PaginatedResponse struct {
-	Success    bool        `json:"success"`
-	Message    string      `json:"message"`
-	Data       interface{} `json:"data"`
-	Pagination Pagination  `json:"pagination"`
+type PaginatedResponse[T any] struct {
+	Success    bool       `json:"success"`
+	Message    string     `json:"message"`
+	Data       T          `json:"data"`
+	Pagination Pagination `json:"pagination"`
 }
 
-func JSONSuccess(c *gin.Context, statusCode int, message string, data interface{}) {
-	c.JSON(statusCode, Response{
+func ToSuccessHandler[T any](c *gin.Context, statusCode int, message string, model T) {
+	c.JSON(statusCode, SuccessResponse[T]{
 		Success: true,
 		Message: message,
-		Data:    data,
+		Data:    model,
 	})
 }
 
-func JSONError(c *gin.Context, statusCode int, message string, errs interface{}) {
+func ToErrorHandler(c *gin.Context, statusCode int, message string, errs any) {
 	var formattedErrors interface{} = errs
 	if err, ok := errs.(error); ok {
 		formattedErrors = err.Error()
 	}
 
-	c.JSON(statusCode, Response{
+	c.JSON(statusCode, ErrorResponse{
 		Success: false,
 		Message: message,
 		Errors:  formattedErrors,
 	})
 }
 
-func JSONPaginated(c *gin.Context, statusCode int, message string, data interface{}, page, limit int, totalData int64) {
+func ToPaginatedSuccessHandler[T any](c *gin.Context, statusCode int, message string, model T, page, limit int, totalData int64) {
 	totalPage := int(totalData) / limit
 	if limit > 0 && int(totalData)%limit != 0 {
 		totalPage++
@@ -55,10 +67,10 @@ func JSONPaginated(c *gin.Context, statusCode int, message string, data interfac
 		totalPage = 1
 	}
 
-	c.JSON(statusCode, PaginatedResponse{
+	c.JSON(statusCode, PaginatedResponse[T]{
 		Success: true,
 		Message: message,
-		Data:    data,
+		Data:    model,
 		Pagination: Pagination{
 			CurrentPage: page,
 			TotalPage:   totalPage,

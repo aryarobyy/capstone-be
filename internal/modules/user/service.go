@@ -2,12 +2,14 @@ package user
 
 import (
 	"context"
+
+	responsehandler "capstone-be/internal/utils"
 )
 
 type UserService interface {
-	Detail(ctx context.Context, req UserDetailRequest) (*UserResponse, error)
-	List(ctx context.Context, req ListUserRequest) ([]UserResponse, error)
-	Update(ctx context.Context, req UpdateUserRequest) (*UserResponse, error)
+	Detail(ctx context.Context, req UserDetailRequest) (*User, error)
+	List(ctx context.Context, req ListUserRequest) (*responsehandler.ListResponse[User], error)
+	Update(ctx context.Context, req UpdateUserRequest) (*User, error)
 	Delete(ctx context.Context, req DeleteUserRequest) error
 }
 
@@ -19,23 +21,38 @@ func NewUserService(repo UserRepository) UserService {
 	return &userService{repo: repo}
 }
 
-func (s *userService) Detail(ctx context.Context, req UserDetailRequest) (*UserResponse, error) {
-	u, err := s.repo.Detail(ctx, req)
+func (s *userService) Detail(ctx context.Context, req UserDetailRequest) (*User, error) {
+	return s.repo.Detail(ctx, req)
+}
+
+func (s *userService) List(ctx context.Context, req ListUserRequest) (*responsehandler.ListResponse[User], error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	index := req.Index
+	if index < 0 {
+		index = 0
+	}
+
+	users, count, err := s.repo.List(ctx, limit, index)
 	if err != nil {
 		return nil, err
 	}
-	return ToUserResponse(u), nil
+
+	return &responsehandler.ListResponse[User]{
+		List:  users,
+		Count: count,
+		Index: index,
+		Limit: limit,
+	}, nil
 }
 
-func (s *userService) List(ctx context.Context, req ListUserRequest) ([]UserResponse, error) {
-	users, err := s.repo.List(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return ToUserResponses(users), nil
-}
-
-func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*UserResponse, error) {
+func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*User, error) {
 	if err := s.repo.Update(ctx, req); err != nil {
 		return nil, err
 	}
@@ -45,7 +62,7 @@ func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*UserR
 		return nil, err
 	}
 
-	return ToUserResponse(u), nil
+	return u, nil
 }
 
 func (s *userService) Delete(ctx context.Context, req DeleteUserRequest) error {

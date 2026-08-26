@@ -12,8 +12,8 @@ var (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, req RegisterRequest) (*AuthResponse, error)
-	Login(ctx context.Context, req LoginRequest) (*AuthResponse, error)
+	Register(ctx context.Context, req RegisterRequest) (*User, error)
+	Login(ctx context.Context, req LoginRequest) (*User, error)
 }
 
 type authService struct {
@@ -24,7 +24,7 @@ func NewAuthService(repo AuthRepository) AuthService {
 	return &authService{repo: repo}
 }
 
-func (s *authService) Register(ctx context.Context, req RegisterRequest) (*AuthResponse, error) {
+func (s *authService) Register(ctx context.Context, req RegisterRequest) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -41,10 +41,10 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 		return nil, err
 	}
 
-	return ToAuthResponse(u), nil
+	return u, nil
 }
 
-func (s *authService) Login(ctx context.Context, req LoginRequest) (*AuthResponse, error) {
+func (s *authService) Login(ctx context.Context, req LoginRequest) (*User, error) {
 	u, err := s.repo.GetByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
@@ -57,5 +57,5 @@ func (s *authService) Login(ctx context.Context, req LoginRequest) (*AuthRespons
 		return nil, ErrInvalidCredentials
 	}
 
-	return ToAuthResponse(u), nil
+	return u, nil
 }

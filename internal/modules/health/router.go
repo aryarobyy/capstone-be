@@ -8,7 +8,7 @@ import (
 
 func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 	handler := NewHealthHandler(db)
-	
+
 	healthGroup := router.Group("/health")
 	{
 		healthGroup.GET("", handler.Check)
