@@ -33,6 +33,7 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 	u := &User{
 		Name:     req.Name,
 		Email:    req.Email,
+		Msisdn:   req.Msisdn,
 		Password: string(hashedPassword),
 	}
 

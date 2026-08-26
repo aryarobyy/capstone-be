@@ -18,24 +18,24 @@ type AuthRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
 
-type postgresAuthRepository struct {
+type authRepository struct {
 	db *sql.DB
 }
 
 func NewAuthRepository(db *sql.DB) AuthRepository {
-	return &postgresAuthRepository{db: db}
+	return &authRepository{db: db}
 }
 
-func (r *postgresAuthRepository) Create(ctx context.Context, u *User) error {
+func (r *authRepository) Create(ctx context.Context, u *User) error {
 	query := `
-		INSERT INTO users (name, email, password, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (name, email, msisdn, password, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
 	u.CreatedAt = time.Now()
 	u.UpdatedAt = time.Now()
 
-	err := r.db.QueryRowContext(ctx, query, u.Name, u.Email, u.Password, u.CreatedAt, u.UpdatedAt).Scan(&u.ID)
+	err := r.db.QueryRowContext(ctx, query, u.Name, u.Email, u.Msisdn, u.Password, u.CreatedAt, u.UpdatedAt).Scan(&u.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
 			return ErrEmailAlreadyExists
@@ -45,15 +45,15 @@ func (r *postgresAuthRepository) Create(ctx context.Context, u *User) error {
 	return nil
 }
 
-func (r *postgresAuthRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+func (r *authRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, name, email, password, created_at, updated_at
+		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
 	var u User
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&u.ID, &u.Name, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Email, &u.Msisdn, &u.Password, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

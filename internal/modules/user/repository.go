@@ -14,30 +14,30 @@ var (
 )
 
 type UserRepository interface {
-	GetByID(ctx context.Context, id int64) (*User, error)
+	Detail(ctx context.Context, req UserDetailRequest) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
-	GetAll(ctx context.Context) ([]User, error)
-	Update(ctx context.Context, u *User) error
-	Delete(ctx context.Context, id int64) error
+	List(ctx context.Context, req ListUserRequest) ([]User, error)
+	Update(ctx context.Context, req UpdateUserRequest) error
+	Delete(ctx context.Context, req DeleteUserRequest) error
 }
 
-type postgresUserRepository struct {
+type userRepository struct {
 	db *sql.DB
 }
 
 func NewUserRepository(db *sql.DB) UserRepository {
-	return &postgresUserRepository{db: db}
+	return &userRepository{db: db}
 }
 
-func (r *postgresUserRepository) GetByID(ctx context.Context, id int64) (*User, error) {
+func (r *userRepository) Detail(ctx context.Context, req UserDetailRequest) (*User, error) {
 	query := `
-		SELECT id, name, email, password, created_at, updated_at
+		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
 	var u User
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
-		&u.ID, &u.Name, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt,
+	err := r.db.QueryRowContext(ctx, query, req.ID).Scan(
+		&u.ID, &u.Name, &u.Email, &u.Msisdn, &u.Password, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -48,15 +48,15 @@ func (r *postgresUserRepository) GetByID(ctx context.Context, id int64) (*User, 
 	return &u, nil
 }
 
-func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, name, email, password, created_at, updated_at
+		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
 	var u User
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
-		&u.ID, &u.Name, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt,
+		&u.ID, &u.Name, &u.Email, &u.Msisdn, &u.Password, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -67,9 +67,9 @@ func (r *postgresUserRepository) GetByEmail(ctx context.Context, email string) (
 	return &u, nil
 }
 
-func (r *postgresUserRepository) GetAll(ctx context.Context) ([]User, error) {
+func (r *userRepository) List(ctx context.Context, req ListUserRequest) ([]User, error) {
 	query := `
-		SELECT id, name, email, password, created_at, updated_at
+		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
 		ORDER BY id DESC
 	`
@@ -82,7 +82,7 @@ func (r *postgresUserRepository) GetAll(ctx context.Context) ([]User, error) {
 	var users []User = make([]User, 0)
 	for rows.Next() {
 		var u User
-		err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.CreatedAt, &u.UpdatedAt)
+		err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Msisdn, &u.Password, &u.CreatedAt, &u.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -94,14 +94,17 @@ func (r *postgresUserRepository) GetAll(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-func (r *postgresUserRepository) Update(ctx context.Context, u *User) error {
+func (r *userRepository) Update(ctx context.Context, req UpdateUserRequest) error {
 	query := `
 		UPDATE users
-		SET name = $1, email = $2, updated_at = $3
-		WHERE id = $4
+		SET name = COALESCE(NULLIF($1, ''), name), 
+		    email = COALESCE(NULLIF($2, ''), email), 
+		    msisdn = COALESCE(NULLIF($3, ''), msisdn),
+		    updated_at = $4
+		WHERE id = $5
 	`
-	u.UpdatedAt = time.Now()
-	result, err := r.db.ExecContext(ctx, query, u.Name, u.Email, u.UpdatedAt, u.ID)
+	updatedAt := time.Now()
+	result, err := r.db.ExecContext(ctx, query, req.Name, req.Email, req.Msisdn, updatedAt, req.ID)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
 			return ErrEmailAlreadyExists
@@ -119,12 +122,12 @@ func (r *postgresUserRepository) Update(ctx context.Context, u *User) error {
 	return nil
 }
 
-func (r *postgresUserRepository) Delete(ctx context.Context, id int64) error {
+func (r *userRepository) Delete(ctx context.Context, req DeleteUserRequest) error {
 	query := `
 		DELETE FROM users
 		WHERE id = $1
 	`
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, query, req.ID)
 	if err != nil {
 		return err
 	}

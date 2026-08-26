@@ -12,9 +12,9 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 	handler := NewUserHandler(service)
 	userGroup := router.Group("/user")
 	{
-		userGroup.GET("", handler.GetAll)
-		userGroup.GET("/:id", handler.GetByID)
-		userGroup.PUT("/:id", handler.Update)
-		userGroup.DELETE("/:id", handler.Delete)
+		userGroup.POST("/list", handler.List)
+		userGroup.POST("/detail", handler.Detail)
+		userGroup.POST("/update", handler.Update)
+		userGroup.POST("/delete", handler.Delete)
 	}
 }
