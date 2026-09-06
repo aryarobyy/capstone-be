@@ -2,14 +2,12 @@ package user
 
 import (
 	"context"
-
-	responsehandler "capstone-be/internal/utils"
 )
 
 type UserService interface {
-	Detail(ctx context.Context, req UserDetailRequest) (*User, error)
-	List(ctx context.Context, req ListUserRequest) (*responsehandler.ListResponse[User], error)
-	Update(ctx context.Context, req UpdateUserRequest) (*User, error)
+	Detail(ctx context.Context, req UserDetailRequest) (*UserResponse, error)
+	List(ctx context.Context, req ListUserRequest) (*ListUserResponse, error)
+	Update(ctx context.Context, req UpdateUserRequest) (*UserResponse, error)
 	Delete(ctx context.Context, req DeleteUserRequest) error
 }
 
@@ -21,11 +19,29 @@ func NewUserService(repo UserRepository) UserService {
 	return &userService{repo: repo}
 }
 
-func (s *userService) Detail(ctx context.Context, req UserDetailRequest) (*User, error) {
-	return s.repo.Detail(ctx, req)
+func toUserResponse(u *User) *UserResponse {
+	if u == nil {
+		return nil
+	}
+	return &UserResponse{
+		ID:        u.ID,
+		Name:      u.Name,
+		Email:     u.Email,
+		Msisdn:    u.Msisdn,
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
+	}
 }
 
-func (s *userService) List(ctx context.Context, req ListUserRequest) (*responsehandler.ListResponse[User], error) {
+func (s *userService) Detail(ctx context.Context, req UserDetailRequest) (*UserResponse, error) {
+	u, err := s.repo.Detail(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return toUserResponse(u), nil
+}
+
+func (s *userService) List(ctx context.Context, req ListUserRequest) (*ListUserResponse, error) {
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 10
@@ -44,15 +60,27 @@ func (s *userService) List(ctx context.Context, req ListUserRequest) (*responseh
 		return nil, err
 	}
 
-	return &responsehandler.ListResponse[User]{
-		List:  users,
-		Count: count,
-		Index: index,
+	data := make([]ListUserData, 0, len(users))
+	for _, u := range users {
+		data = append(data, ListUserData{
+			ID:        u.ID,
+			Name:      u.Name,
+			Email:     u.Email,
+			Msisdn:    u.Msisdn,
+			CreatedAt: u.CreatedAt,
+			UpdatedAt: u.UpdatedAt,
+		})
+	}
+
+	return &ListUserResponse{
+		Data:  data,
+		Total: count,
 		Limit: limit,
+		Index: index,
 	}, nil
 }
 
-func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*User, error) {
+func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*UserResponse, error) {
 	if err := s.repo.Update(ctx, req); err != nil {
 		return nil, err
 	}
@@ -62,7 +90,7 @@ func (s *userService) Update(ctx context.Context, req UpdateUserRequest) (*User,
 		return nil, err
 	}
 
-	return u, nil
+	return toUserResponse(u), nil
 }
 
 func (s *userService) Delete(ctx context.Context, req DeleteUserRequest) error {
