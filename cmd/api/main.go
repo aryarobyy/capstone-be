@@ -21,6 +21,12 @@ import (
 )
 
 func main() {
+	closeLogger, err := middleware.InitLogger()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer closeLogger()
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configurations: %v", err)

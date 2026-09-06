@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 
@@ -15,7 +15,10 @@ func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("[PANIC RECOVERY] err: %v\nstack:\n%s", err, string(debug.Stack()))
+				slog.Error("panic recovered",
+					slog.Any("error", err),
+					slog.String("stack", string(debug.Stack())),
+				)
 
 				responsehandler.ToErrorHandler(
 					c,

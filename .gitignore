@@ -36,5 +36,6 @@ go.work.sum
 tmp/
 bin/
 dist/
+log/
 
 internal/modules/history/
