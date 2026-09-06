@@ -30,9 +30,9 @@ func (h *HealthHandler) Check(c *gin.Context) {
 		dbStatus = "NOT_CONFIGURED"
 	}
 
-	data := gin.H{
-		"status":   status,
-		"database": dbStatus,
+	data := HealthResponse{
+		Status:   status,
+		Database: dbStatus,
 	}
 
 	statusCode := http.StatusOK
