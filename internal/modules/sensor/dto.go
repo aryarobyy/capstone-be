@@ -1,5 +1,7 @@
 package sensor
 
+import "time"
+
 type CreateSensorRequest struct {
 	AreaID      int64  `json:"area_id" binding:"required"`
 	Name        string `json:"name" binding:"required"`
@@ -39,4 +41,33 @@ type SensorFilter struct {
 
 type DeleteSensorRequest struct {
 	ID int64 `json:"id" binding:"required"`
+}
+
+type ListSensorData struct {
+	ID          int64     `json:"id"`
+	AreaID      int64     `json:"area_id"`
+	Name        string    `json:"name"`
+	Type        string    `json:"type"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ListSensorResponse struct {
+	Data  []ListSensorData `json:"data"`
+	Total int              `json:"total"`
+	Limit int              `json:"limit"`
+	Index int              `json:"index"`
+}
+
+type SensorResponse struct {
+	ID          int64     `json:"id"`
+	AreaID      int64     `json:"area_id"`
+	Name        string    `json:"name"`
+	Type        string    `json:"type"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
