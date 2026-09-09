@@ -3,9 +3,58 @@ name: Deploy App
 on:
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
+  test-and-migrate-check:
+    name: Test & Migration Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: capstone_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.22'
+
+      - name: Run Unit Tests
+        run: go test -v ./...
+
+      - name: Check Database Migrations (Up & Down)
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: capstone_db
+          DB_SSLMODE: disable
+          DB_TIMEZONE: UTC
+        run: |
+          go run cmd/migrate/main.go up
+          go run cmd/migrate/main.go down
+          go run cmd/migrate/main.go up
+
   deploy:
+    name: Deploy to Server
+    needs: test-and-migrate-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -15,11 +64,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '>=1.22'
 
-      - name: Build binary (static)
+      - name: Build binaries (static)
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app ./cmd/api
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o migrate ./cmd/migrate
 
       - name: Check SSH key fingerprint
         env:
@@ -36,10 +86,10 @@ jobs:
           username: ${{ secrets.USERNAME }}
           port: ${{ secrets.SSH_PORT || 22 }}
           key: ${{ secrets.SSH_KEY }}
-          source: "app"
+          source: "app,migrate,migrations"
           target: "/home/${{ secrets.USERNAME }}/app/capstone-be"
           
-      - name: Restart service
+      - name: Run migrations and restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -47,4 +97,7 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            cd /home/${{ secrets.USERNAME }}/app/capstone-be
+            chmod +x app migrate
+            ./migrate up
             sudo systemctl restart capstone-be
