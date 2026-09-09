@@ -139,9 +139,9 @@ func TestSensorReadingService_List_DataMapping(t *testing.T) {
 			{
 				ID:           100,
 				SensorID:     3,
-				SoilMoisture: &soilMoisture,
-				Temperature:  &temperature,
-				Humidity:     &humidity,
+				SoilMoisture: soilMoisture,
+				Temperature:  temperature,
+				Humidity:     humidity,
 				RecordedAt:   now,
 			},
 		},
@@ -157,7 +157,7 @@ func TestSensorReadingService_List_DataMapping(t *testing.T) {
 		t.Fatalf("expected 1 item, got %d", len(res.Data))
 	}
 	item := res.Data[0]
-	if item.ID != 100 || item.SensorID != 3 || item.SoilMoisture == nil || *item.SoilMoisture != soilMoisture || item.RecordedAt != now {
+	if item.ID != 100 || item.SensorID != 3 || item.SoilMoisture != soilMoisture || item.Temperature != temperature || item.Humidity != humidity || item.RecordedAt != now {
 		t.Errorf("data mapping mismatch: %+v", item)
 	}
 }

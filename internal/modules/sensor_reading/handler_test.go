@@ -46,9 +46,9 @@ func TestSensorReadingHandler_List(t *testing.T) {
 				{
 					ID:           1,
 					SensorID:     3,
-					SoilMoisture: &soilMoisture,
-					Temperature:  &temperature,
-					Humidity:     &humidity,
+					SoilMoisture: soilMoisture,
+					Temperature:  temperature,
+					Humidity:     humidity,
 					RecordedAt:   now,
 				},
 			},
