@@ -1,4 +1,4 @@
-.PHONY: run dev build tidy clean
+.PHONY: run dev build tidy clean migrate-up migrate-down
 
 # Run the backend application
 run:
@@ -7,7 +7,6 @@ run:
 # Run with hot reload (Air)
 dev:
 	air
-
 
 # Build executable binary
 build:
@@ -21,3 +20,11 @@ clean:
 # Clean and tidy dependencies
 tidy:
 	go mod tidy
+
+# Run database migrations (apply pending migrations)
+migrate-up:
+	go run cmd/migrate/main.go up
+
+# Rollback last database migration
+migrate-down:
+	go run cmd/migrate/main.go down

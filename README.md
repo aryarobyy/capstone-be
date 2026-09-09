@@ -101,18 +101,17 @@ Or using raw Go commands:
 - `PUT /api/users/:id` - Update user details.
 - `DELETE /api/users/:id` - Delete a user.
 
-### Database Table Schema (Users)
+### Database Migrations
 
-To run the User CRUD showcase, create the `users` table in your PostgreSQL database:
+Run database migrations to initialize or update table schemas:
 
-```sql
-CREATE TABLE IF NOT EXISTS users (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-);
-```
-# capstone-be
+Using the Makefile:
+- Apply all pending migrations: `make migrate-up`
+- Rollback the last migration: `make migrate-down`
+
+Or using raw Go commands:
+- Apply migrations: `go run cmd/migrate/main.go up`
+- Rollback last migration: `go run cmd/migrate/main.go down`
+
+The migration files are stored under the `migrations/` directory and tracked in the `schema_migrations` table.
+
