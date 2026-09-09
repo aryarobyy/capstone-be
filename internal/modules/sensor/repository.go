@@ -29,9 +29,9 @@ func NewSensorRepository(db *sql.DB) SensorRepository {
 }
 
 func (r *sensoriRepository) Create(ctx context.Context, req CreateSensorRequest) (int64, error) {
-	query := `INSERT INTO sensors (area_id, name, code, type, description) VALUES ($1, $2, $3, $4, $5) RETURNING id`
+	query := `INSERT INTO sensors (area_id, name, code, description) VALUES ($1, $2, $3, $4) RETURNING id`
 	var id int64
-	err := r.db.QueryRowContext(ctx, query, req.AreaID, req.Name, req.Code, req.Type, req.Description).Scan(&id)
+	err := r.db.QueryRowContext(ctx, query, req.AreaID, req.Name, req.Code, req.Description).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -39,8 +39,8 @@ func (r *sensoriRepository) Create(ctx context.Context, req CreateSensorRequest)
 }
 
 func (r *sensoriRepository) Update(ctx context.Context, req UpdateSensorRequest) error {
-	query := `UPDATE sensors SET area_id = $1, name = $2, code = $3, type = $4, description = $5 WHERE id = $6`
-	result, err := r.db.ExecContext(ctx, query, req.AreaID, req.Name, req.Code, req.Type, req.Description, req.ID)
+	query := `UPDATE sensors SET area_id = COALESCE($1, area_id), name = COALESCE($2, name), code = COALESCE($3, code), description = COALESCE($4, description) WHERE id = $5`
+	result, err := r.db.ExecContext(ctx, query, req.AreaID, req.Name, req.Code, req.Description, req.ID)
 	if err != nil {
 		return err
 	}
@@ -71,8 +71,8 @@ func (r *sensoriRepository) Delete(ctx context.Context, req DeleteSensorRequest)
 }
 
 func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Sensor, int, error) {
-	conditions := make([]string, 0, 3)
-	args := make([]any, 0, 5)
+	conditions := make([]string, 0, 2)
+	args := make([]any, 0, 4)
 	argIndex := 1
 
 	if filter.AreaID != 0 {
@@ -83,11 +83,6 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 	if filter.Name != "" {
 		conditions = append(conditions, fmt.Sprintf("name ILIKE $%d", argIndex))
 		args = append(args, "%"+filter.Name+"%")
-		argIndex++
-	}
-	if filter.Type != "" {
-		conditions = append(conditions, fmt.Sprintf("type = $%d", argIndex))
-		args = append(args, filter.Type)
 		argIndex++
 	}
 
@@ -103,7 +98,7 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, area_id, name, code, type, description, created_at, updated_at
+		SELECT id, area_id, name, code, COALESCE(description, ''), created_at, updated_at
 		FROM sensors
 		%s
 		ORDER BY id DESC
@@ -118,7 +113,7 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 	sensors := make([]Sensor, 0)
 	for rows.Next() {
 		var sensor Sensor
-		if err := rows.Scan(&sensor.ID, &sensor.AreaID, &sensor.Name, &sensor.Code, &sensor.Type, &sensor.Description, &sensor.CreatedAt, &sensor.UpdatedAt); err != nil {
+		if err := rows.Scan(&sensor.ID, &sensor.AreaID, &sensor.Name, &sensor.Code, &sensor.Description, &sensor.CreatedAt, &sensor.UpdatedAt); err != nil {
 			return nil, 0, err
 		}
 		sensors = append(sensors, sensor)
@@ -130,9 +125,9 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 }
 
 func (r *sensoriRepository) Detail(ctx context.Context, req DetailSensorRequest) (*Sensor, error) {
-	query := `SELECT id, area_id, name, code, type, description, created_at, updated_at FROM sensors WHERE id = $1`
+	query := `SELECT id, area_id, name, code, COALESCE(description, ''), created_at, updated_at FROM sensors WHERE id = $1`
 	var sensor Sensor
-	err := r.db.QueryRowContext(ctx, query, req.ID).Scan(&sensor.ID, &sensor.AreaID, &sensor.Name, &sensor.Code, &sensor.Type, &sensor.Description, &sensor.CreatedAt, &sensor.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query, req.ID).Scan(&sensor.ID, &sensor.AreaID, &sensor.Name, &sensor.Code, &sensor.Description, &sensor.CreatedAt, &sensor.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrSensorNotFound

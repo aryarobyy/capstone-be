@@ -2,6 +2,13 @@ package sensor
 
 import (
 	"context"
+	"errors"
+
+	"capstone-be/internal/modules/area"
+)
+
+var (
+	ErrAreaNotFound = errors.New("area not found")
 )
 
 type SensorService interface {
@@ -13,11 +20,12 @@ type SensorService interface {
 }
 
 type sensorService struct {
-	repo SensorRepository
+	repo     SensorRepository
+	areaRepo area.AreaRepository
 }
 
-func NewSensorService(repo SensorRepository) SensorService {
-	return &sensorService{repo: repo}
+func NewSensorService(repo SensorRepository, areaRepo area.AreaRepository) SensorService {
+	return &sensorService{repo: repo, areaRepo: areaRepo}
 }
 
 func toSensorResponse(s *Sensor) *SensorResponse {
@@ -28,7 +36,6 @@ func toSensorResponse(s *Sensor) *SensorResponse {
 		ID:          s.ID,
 		AreaID:      s.AreaID,
 		Name:        s.Name,
-		Type:        s.Type,
 		Code:        s.Code,
 		Description: s.Description,
 		CreatedAt:   s.CreatedAt,
@@ -37,6 +44,16 @@ func toSensorResponse(s *Sensor) *SensorResponse {
 }
 
 func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*SensorResponse, error) {
+	if req.AreaID != 0 {
+		exists, err := s.areaRepo.Exists(ctx, req.AreaID)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, ErrAreaNotFound
+		}
+	}
+
 	id, err := s.repo.Create(ctx, req)
 	if err != nil {
 		return nil, err
@@ -49,6 +66,16 @@ func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*S
 }
 
 func (s *sensorService) Update(ctx context.Context, req UpdateSensorRequest) (*SensorResponse, error) {
+	if req.AreaID != nil && *req.AreaID != 0 {
+		exists, err := s.areaRepo.Exists(ctx, *req.AreaID)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, ErrAreaNotFound
+		}
+	}
+
 	if err := s.repo.Update(ctx, req); err != nil {
 		return nil, err
 	}
@@ -80,7 +107,6 @@ func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListS
 	sensors, count, err := s.repo.List(ctx, SensorFilter{
 		AreaID: req.AreaID,
 		Name:   req.Name,
-		Type:   req.Type,
 		Limit:  limit,
 		Index:  index,
 	})
@@ -94,7 +120,6 @@ func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListS
 			ID:          item.ID,
 			AreaID:      item.AreaID,
 			Name:        item.Name,
-			Type:        item.Type,
 			Code:        item.Code,
 			Description: item.Description,
 			CreatedAt:   item.CreatedAt,

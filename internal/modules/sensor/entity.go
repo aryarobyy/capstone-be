@@ -7,7 +7,6 @@ type Sensor struct {
 	AreaID      int64     `json:"area_id"`
 	Name        string    `json:"name"`
 	Code        string    `json:"code"`
-	Type        string    `json:"type"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

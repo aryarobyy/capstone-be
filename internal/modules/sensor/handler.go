@@ -26,7 +26,7 @@ func (h *SensorHandler) Create(c *gin.Context) {
 
 	model, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to create sensor", err.Error())
+		handleSensorError(c, err, "Failed to create sensor")
 		return
 	}
 	responsehandler.ToSuccessHandler(c, http.StatusCreated, "Sensor created successfully", model)
@@ -94,6 +94,10 @@ func (h *SensorHandler) Delete(c *gin.Context) {
 func handleSensorError(c *gin.Context, err error, message string) {
 	if errors.Is(err, ErrSensorNotFound) {
 		responsehandler.ToErrorHandler(c, http.StatusNotFound, err.Error(), nil)
+		return
+	}
+	if errors.Is(err, ErrAreaNotFound) {
+		responsehandler.ToErrorHandler(c, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
 	responsehandler.ToErrorHandler(c, http.StatusInternalServerError, message, err.Error())

@@ -3,20 +3,18 @@ package sensor
 import "time"
 
 type CreateSensorRequest struct {
-	AreaID      int64  `json:"area_id" binding:"required"`
-	Name        string `json:"name" binding:"required"`
-	Code        string `json:"code" binding:"required"`
-	Type        string `json:"type" binding:"required"`
-	Description string `json:"description" binding:"required"`
+	AreaID      int64   `json:"area_id"`
+	Name        string  `json:"name" binding:"required"`
+	Code        string  `json:"code" binding:"required"`
+	Description *string `json:"description" binding:"omitempty"`
 }
 
 type UpdateSensorRequest struct {
-	ID          int64  `json:"id" binding:"required"`
-	AreaID      int64  `json:"area_id" binding:"required"`
-	Code        string `json:"code" binding:"required"`
-	Name        string `json:"name" binding:"required"`
-	Type        string `json:"type" binding:"required"`
-	Description string `json:"description" binding:"required"`
+	ID          int64   `json:"id" binding:"required"`
+	AreaID      *int64  `json:"area_id" binding:"omitempty"`
+	Code        *string `json:"code" binding:"omitempty"`
+	Name        *string `json:"name" binding:"omitempty"`
+	Description *string `json:"description" binding:"omitempty"`
 }
 
 type DetailSensorRequest struct {
@@ -26,7 +24,6 @@ type DetailSensorRequest struct {
 type ListSensorRequest struct {
 	AreaID int64  `json:"area_id"`
 	Name   string `json:"name"`
-	Type   string `json:"type"`
 	Limit  int    `json:"limit"`
 	Index  int    `json:"index"`
 }
@@ -34,7 +31,6 @@ type ListSensorRequest struct {
 type SensorFilter struct {
 	AreaID int64
 	Name   string
-	Type   string
 	Limit  int
 	Index  int
 }
@@ -47,7 +43,6 @@ type ListSensorData struct {
 	ID          int64     `json:"id"`
 	AreaID      int64     `json:"area_id"`
 	Name        string    `json:"name"`
-	Type        string    `json:"type"`
 	Code        string    `json:"code"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -65,7 +60,6 @@ type SensorResponse struct {
 	ID          int64     `json:"id"`
 	AreaID      int64     `json:"area_id"`
 	Name        string    `json:"name"`
-	Type        string    `json:"type"`
 	Code        string    `json:"code"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`

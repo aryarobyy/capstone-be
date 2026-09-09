@@ -2,8 +2,11 @@ package sensor
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"capstone-be/internal/modules/area"
 )
 
 type mockSensorRepository struct {
@@ -11,18 +14,19 @@ type mockSensorRepository struct {
 	sensors        []Sensor
 	total          int
 	err            error
+	detailSensor   *Sensor
 }
 
 func (m *mockSensorRepository) Create(ctx context.Context, req CreateSensorRequest) (int64, error) {
-	return 1, nil
+	return 1, m.err
 }
 
 func (m *mockSensorRepository) Update(ctx context.Context, req UpdateSensorRequest) error {
-	return nil
+	return m.err
 }
 
 func (m *mockSensorRepository) Delete(ctx context.Context, req DeleteSensorRequest) error {
-	return nil
+	return m.err
 }
 
 func (m *mockSensorRepository) List(ctx context.Context, filter SensorFilter) ([]Sensor, int, error) {
@@ -31,6 +35,28 @@ func (m *mockSensorRepository) List(ctx context.Context, filter SensorFilter) ([
 }
 
 func (m *mockSensorRepository) Detail(ctx context.Context, req DetailSensorRequest) (*Sensor, error) {
+	if m.detailSensor != nil {
+		return m.detailSensor, m.err
+	}
+	return &Sensor{ID: req.ID, Name: "Test Sensor"}, m.err
+}
+
+type mockAreaRepository struct {
+	existsMap map[int64]bool
+	err       error
+}
+
+func (m *mockAreaRepository) Exists(ctx context.Context, id int64) (bool, error) {
+	if m.err != nil {
+		return false, m.err
+	}
+	if m.existsMap == nil {
+		return true, nil
+	}
+	return m.existsMap[id], nil
+}
+
+func (m *mockAreaRepository) FindByID(ctx context.Context, id int64) (*area.Area, error) {
 	return nil, nil
 }
 
@@ -47,7 +73,7 @@ func TestSensorService_List_Pagination(t *testing.T) {
 			name:          "Default pagination when request is empty",
 			req:           ListSensorRequest{},
 			mockTotal:     15,
-			mockSensors:   []Sensor{{ID: 1, Name: "Sensor 1", Type: "DHT22"}},
+			mockSensors:   []Sensor{{ID: 1, Name: "Sensor 1"}},
 			expectedLimit: 10,
 			expectedIndex: 0,
 		},
@@ -58,7 +84,7 @@ func TestSensorService_List_Pagination(t *testing.T) {
 				Index: 10,
 			},
 			mockTotal:     15,
-			mockSensors:   []Sensor{{ID: 6, Name: "Sensor 6", Type: "DHT22"}},
+			mockSensors:   []Sensor{{ID: 6, Name: "Sensor 6"}},
 			expectedLimit: 5,
 			expectedIndex: 10,
 		},
@@ -70,7 +96,8 @@ func TestSensorService_List_Pagination(t *testing.T) {
 				total:   tt.mockTotal,
 				sensors: tt.mockSensors,
 			}
-			svc := NewSensorService(mockRepo)
+			mockAreaRepo := &mockAreaRepository{}
+			svc := NewSensorService(mockRepo, mockAreaRepo)
 
 			res, err := svc.List(context.Background(), tt.req)
 			if err != nil {
@@ -105,7 +132,6 @@ func TestSensorService_List_DataMapping(t *testing.T) {
 				ID:          1,
 				AreaID:      2,
 				Name:        "Soil Moisture #1",
-				Type:        "Capacitive",
 				Code:        "SM-01",
 				Description: "Area A sensor",
 				CreatedAt:   now,
@@ -113,7 +139,8 @@ func TestSensorService_List_DataMapping(t *testing.T) {
 			},
 		},
 	}
-	svc := NewSensorService(mockRepo)
+	mockAreaRepo := &mockAreaRepository{}
+	svc := NewSensorService(mockRepo, mockAreaRepo)
 
 	res, err := svc.List(context.Background(), ListSensorRequest{Limit: 10, Index: 0})
 	if err != nil {
@@ -128,3 +155,90 @@ func TestSensorService_List_DataMapping(t *testing.T) {
 		t.Errorf("data mapping mismatch: %+v", item)
 	}
 }
+
+func TestSensorService_Create_AreaValidation(t *testing.T) {
+	mockRepo := &mockSensorRepository{}
+	mockAreaRepo := &mockAreaRepository{
+		existsMap: map[int64]bool{
+			1: true,
+			2: false,
+		},
+	}
+	svc := NewSensorService(mockRepo, mockAreaRepo)
+
+	t.Run("Create with AreaID == 0 succeeds without checking area", func(t *testing.T) {
+		res, err := svc.Create(context.Background(), CreateSensorRequest{
+			AreaID: 0,
+			Name:   "Sensor Without Area",
+			Code:   "S-00",
+		})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil response")
+		}
+	})
+
+	t.Run("Create with existing AreaID succeeds", func(t *testing.T) {
+		res, err := svc.Create(context.Background(), CreateSensorRequest{
+			AreaID: 1,
+			Name:   "Sensor With Valid Area",
+			Code:   "S-01",
+		})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil response")
+		}
+	})
+
+	t.Run("Create with non-existent AreaID returns ErrAreaNotFound", func(t *testing.T) {
+		_, err := svc.Create(context.Background(), CreateSensorRequest{
+			AreaID: 2,
+			Name:   "Sensor With Invalid Area",
+			Code:   "S-02",
+		})
+		if !errors.Is(err, ErrAreaNotFound) {
+			t.Fatalf("expected ErrAreaNotFound, got %v", err)
+		}
+	})
+}
+
+func TestSensorService_Update_AreaValidation(t *testing.T) {
+	mockRepo := &mockSensorRepository{}
+	mockAreaRepo := &mockAreaRepository{
+		existsMap: map[int64]bool{
+			1: true,
+			2: false,
+		},
+	}
+	svc := NewSensorService(mockRepo, mockAreaRepo)
+
+	t.Run("Update with non-existent AreaID returns ErrAreaNotFound", func(t *testing.T) {
+		invalidAreaID := int64(2)
+		_, err := svc.Update(context.Background(), UpdateSensorRequest{
+			ID:     1,
+			AreaID: &invalidAreaID,
+		})
+		if !errors.Is(err, ErrAreaNotFound) {
+			t.Fatalf("expected ErrAreaNotFound, got %v", err)
+		}
+	})
+
+	t.Run("Update with existing AreaID succeeds", func(t *testing.T) {
+		validAreaID := int64(1)
+		res, err := svc.Update(context.Background(), UpdateSensorRequest{
+			ID:     1,
+			AreaID: &validAreaID,
+		})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil response")
+		}
+	})
+}
+
