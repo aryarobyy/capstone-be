@@ -12,11 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15-alpine
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: capstone_db
+          POSTGRES_USER: ${{ secrets.DB_USERNAME}}
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.DB_NAME}}
         ports:
           - 5432:5432
         options: >-
@@ -41,9 +41,9 @@ jobs:
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
-          DB_USER: ${{ secrets.DB_USERNAME }}
+          DB_USER: ${{ secrets.DB_USERNAME}}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_NAME: ${{ secrets.DB_NAME}}
           DB_SSLMODE: disable
           DB_TIMEZONE: UTC
         run: |
