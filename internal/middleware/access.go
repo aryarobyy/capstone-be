@@ -12,8 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ResourceAccess is applied after JWTAuth. Lists require an explicit owned scope.
-// Existing unassigned areas are only accessible to administrators until assigned.
 func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := c.MustGet(UserIDKey).(int64)
@@ -33,6 +31,10 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 			c.AbortWithStatus(403)
 			return
 		}
+		if parts[1] == "list" {
+			c.Next()
+			return
+		}
 		var req struct {
 			ID       int64  `json:"id"`
 			SensorID int64  `json:"sensor_id"`
@@ -47,20 +49,22 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 		allowed := false
 		switch parts[0] {
 		case "user":
-			allowed = parts[1] != "list" && req.ID == user
+			allowed = req.ID == user
 		case "sensor":
-			if parts[1] == "create" || parts[1] == "list" {
-				if req.AreaID != nil {
+			if parts[1] == "create" {
+				if req.AreaID != nil && *req.AreaID != 0 {
 					allowed, err = ownsArea(c, db, user, *req.AreaID)
+				} else {
+					allowed = true
 				}
 			} else {
 				allowed, err = ownsSensor(c, db, user, req.ID)
-				if allowed && err == nil && req.AreaID != nil {
+				if allowed && err == nil && req.AreaID != nil && *req.AreaID != 0 {
 					allowed, err = ownsArea(c, db, user, *req.AreaID)
 				}
 			}
 		case "sensor-reading", "history":
-			if parts[1] == "create" || parts[1] == "list" {
+			if parts[1] == "create" {
 				allowed, err = ownsSensor(c, db, user, req.SensorID)
 			} else {
 				query := `SELECT EXISTS(SELECT 1 FROM sensor_readings r JOIN sensors s ON s.id=r.sensor_id JOIN areas a ON a.id=s.area_id WHERE r.id=$1 AND a.owner_id=$2)`
@@ -75,7 +79,7 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 			return
 		}
 		if !allowed {
-			c.AbortWithStatusJSON(403, gin.H{"error": "resource access denied; lists require an owned area_id or sensor_id"})
+			c.AbortWithStatusJSON(403, gin.H{"error": "resource access denied"})
 			return
 		}
 		c.Next()
