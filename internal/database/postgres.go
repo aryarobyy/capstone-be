@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -32,11 +33,13 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(100)
 	db.SetConnMaxLifetime(time.Hour)
 
-	if err := db.Ping(); err != nil {
-		log.Printf("Warning: Failed to ping database on startup: %v\n", err)
-	} else {
-		log.Println("Database connection successfully established")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("database unavailable: %w", err)
 	}
+	log.Println("Database connection successfully established")
 
 	return db, nil
 }

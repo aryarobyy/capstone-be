@@ -19,6 +19,7 @@ type Config struct {
 	DBSSLMode          string
 	DBTimeZone         string
 	JWTSecret          string
+	JWTAccessMinutes   int
 	JWTExpirationHours int
 }
 
@@ -32,7 +33,12 @@ func LoadConfig() (*Config, error) {
 		jwtExpHours = 72
 	}
 
+	minutes, err := strconv.Atoi(getEnv("JWT_ACCESS_MINUTES", "15"))
+	if err != nil {
+		return nil, err
+	}
 	return &Config{
+		JWTAccessMinutes:   minutes,
 		Port:               getEnv("PORT", "8080"),
 		Env:                getEnv("ENV", "development"),
 		DBHost:             getEnv("DB_HOST", "127.0.0.1"),
@@ -42,7 +48,7 @@ func LoadConfig() (*Config, error) {
 		DBName:             getEnv("DB_NAME", "capstone_db"),
 		DBSSLMode:          getEnv("DB_SSLMODE", "disable"),
 		DBTimeZone:         getEnv("DB_TIMEZONE", "Asia/Jakarta"),
-		JWTSecret:          getEnv("JWT_SECRET", "supersecretjwtkeychangeinproduction"),
+		JWTSecret:          getEnv("JWT_SECRET", ""),
 		JWTExpirationHours: jwtExpHours,
 	}, nil
 }
