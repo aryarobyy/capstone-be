@@ -1,4 +1,4 @@
-CREATE TABLE device_tokens (
+CREATE TABLE IF NOT EXISTS device_tokens (
  id BIGSERIAL PRIMARY KEY,
  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  token TEXT NOT NULL UNIQUE,
@@ -6,8 +6,8 @@ CREATE TABLE device_tokens (
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX device_tokens_user_id_idx ON device_tokens(user_id);
-CREATE TABLE notifications (
+CREATE INDEX IF NOT EXISTS device_tokens_user_id_idx ON device_tokens(user_id);
+CREATE TABLE IF NOT EXISTS notifications (
  id BIGSERIAL PRIMARY KEY,
  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  title TEXT NOT NULL,
@@ -17,4 +17,4 @@ CREATE TABLE notifications (
  is_read BOOLEAN NOT NULL DEFAULT FALSE,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX notifications_user_id_id_idx ON notifications(user_id, id DESC);
+CREATE INDEX IF NOT EXISTS notifications_user_id_id_idx ON notifications(user_id, id DESC);
