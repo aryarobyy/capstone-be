@@ -13,9 +13,6 @@ import (
 // remain in history but never rewind alert state. Gaps reset the sustained duration.
 func EvaluateTx(ctx context.Context, tx *sql.Tx, sensor int64, at time.Time, values map[string]float64) error {
 	var owner sql.NullInt64
-	if err := tx.QueryRowContext(ctx, `SELECT a.owner_id FROM sensors s LEFT JOIN areas a ON a.id=s.area_id WHERE s.id=$1`, sensor).Scan(&owner); err != nil {
-		return err
-	}
 	rows, err := tx.QueryContext(ctx, `SELECT parameter,min_value,max_value,duration_seconds,cooldown_seconds,max_gap_seconds FROM alert_rules WHERE sensor_id=$1 AND enabled`, sensor)
 	if err != nil {
 		return err

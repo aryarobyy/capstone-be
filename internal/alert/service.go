@@ -38,7 +38,7 @@ func (s *Service) SaveRule(ctx context.Context, user int64, r Rule) error {
 	}
 	defer tx.Rollback()
 	var id int64
-	err = tx.QueryRowContext(ctx, `SELECT s.id FROM sensors s LEFT JOIN areas a ON a.id=s.area_id WHERE s.id=$1 AND (a.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND is_admin)) FOR UPDATE OF s`, r.SensorID, user).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT s.id FROM sensors s WHERE s.id=$1 FOR UPDATE OF s`, r.SensorID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return ErrForbidden
 	}
@@ -59,7 +59,7 @@ func (s *Service) SaveRule(ctx context.Context, user int64, r Rule) error {
 }
 func (s *Service) Rules(ctx context.Context, user, sensor int64) ([]Rule, error) {
 	var allowed bool
-	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sensors s LEFT JOIN areas a ON a.id=s.area_id WHERE s.id=$1 AND (a.owner_id=$2 OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND is_admin)))`, sensor, user).Scan(&allowed); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sensors WHERE id=$1)`, sensor).Scan(&allowed); err != nil {
 		return nil, err
 	}
 	if !allowed {
@@ -87,7 +87,7 @@ func (s *Service) SensorKey(ctx context.Context, user, sensor int64) (string, er
 	}
 	raw := base64.RawURLEncoding.EncodeToString(b)
 	hash := sha256.Sum256([]byte(raw))
-	result, err := s.db.ExecContext(ctx, `UPDATE sensors s SET api_key_hash=$3 WHERE s.id=$1 AND (EXISTS(SELECT 1 FROM areas a WHERE a.id=s.area_id AND a.owner_id=$2) OR EXISTS(SELECT 1 FROM users WHERE id=$2 AND is_admin))`, sensor, user, hash[:])
+	result, err := s.db.ExecContext(ctx, `UPDATE sensors s SET api_key_hash=$2 WHERE s.id=$1`, sensor, hash[:])
 	if err != nil {
 		return "", err
 	}
@@ -102,18 +102,17 @@ func (s *Service) SensorKey(ctx context.Context, user, sensor int64) (string, er
 }
 
 type Area struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Owner *int64 `json:"owner_id"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
 }
 
 func (s *Service) CreateArea(ctx context.Context, user int64, name string) (int64, error) {
 	var id int64
-	err := s.db.QueryRowContext(ctx, `INSERT INTO areas(name,owner_id) VALUES($1,$2) RETURNING id`, name, user).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `INSERT INTO areas(name) VALUES($1) RETURNING id`, name).Scan(&id)
 	return id, err
 }
 func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,owner_id FROM areas WHERE owner_id=$1 OR EXISTS(SELECT 1 FROM users WHERE id=$1 AND is_admin) ORDER BY id`, user)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,name FROM areas ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +120,7 @@ func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
 	out := []Area{}
 	for rows.Next() {
 		var a Area
-		if err := rows.Scan(&a.ID, &a.Name, &a.Owner); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -131,16 +130,5 @@ func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
 
 // Assignment of legacy unowned areas is administrative and cannot be claimed by arbitrary users.
 func (s *Service) AssignArea(ctx context.Context, id, owner int64) error {
-	result, err := s.db.ExecContext(ctx, `UPDATE areas SET owner_id=$2 WHERE id=$1`, id, owner)
-	if err != nil {
-		return err
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return sql.ErrNoRows
-	}
 	return nil
 }

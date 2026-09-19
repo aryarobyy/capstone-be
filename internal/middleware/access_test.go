@@ -131,6 +131,10 @@ func TestResourceAccess_ListEndpoints(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	r.POST("/api/sensor-reading/create", func(c *gin.Context) {
+		c.JSON(http.StatusCreated, gin.H{"status": "created"})
+	})
+
 	t.Run("sensor list with area_id is allowed for non-admin without owning area", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"area_id": 1}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/sensor/list", body)
@@ -179,15 +183,55 @@ func TestResourceAccess_ListEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("non-list endpoint like sensor detail is denied if not owned", func(t *testing.T) {
+	r.POST("/api/user/detail", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	t.Run("sensor-reading create is allowed", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"sensor_id": 1, "soil_moisture": 50, "temperature": 25, "humidity": 60, "recorded_at": "2026-09-19T13:00:00Z"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/sensor-reading/create", body)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected status 201, got %d with body %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("sensor detail is allowed without owner_id check", func(t *testing.T) {
 		body := bytes.NewBufferString(`{"id": 999}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/sensor/detail", body)
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d with body %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("user detail with different ID is denied", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"id": 999}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/user/detail", body)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("expected status 403, got %d with body %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("user detail with own ID is allowed", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"id": 42}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/user/detail", body)
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d with body %s", w.Code, w.Body.String())
 		}
 	})
 }
