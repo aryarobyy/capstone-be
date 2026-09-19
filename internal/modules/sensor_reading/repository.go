@@ -1,6 +1,7 @@
 package sensorreading
 
 import (
+	"capstone-be/internal/alert"
 	"context"
 	"database/sql"
 	"errors"
@@ -28,15 +29,29 @@ func NewSensorReadingRepository(db *sql.DB) SensorReadingRepository {
 }
 
 func (r *sensorReadingRepository) Create(ctx context.Context, req CreateSensorReadingRequest) error {
-	query := `
-		INSERT INTO sensor_readings (sensor_id, soil_moisture, temperature, humidity, recorded_at)
-		VALUES ($1, $2, $3, $4, $5)
-	`
-	_, err := r.db.ExecContext(ctx, query, req.SensorID, req.SoilMoisture, req.Temperature, req.Humidity, req.RecordedAt)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer tx.Rollback()
+	var id int64
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM sensors WHERE id=$1 FOR UPDATE`, req.SensorID).Scan(&id); err != nil {
+		return err
+	}
+	var duplicate bool
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sensor_readings WHERE sensor_id=$1 AND recorded_at=$2)`, req.SensorID, req.RecordedAt).Scan(&duplicate); err != nil {
+		return err
+	}
+	if duplicate {
+		return tx.Commit()
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO sensor_readings(sensor_id,soil_moisture,temperature,humidity,recorded_at) VALUES($1,$2,$3,$4,$5)`, req.SensorID, req.SoilMoisture, req.Temperature, req.Humidity, req.RecordedAt); err != nil {
+		return err
+	}
+	if err = alert.EvaluateTx(ctx, tx, req.SensorID, req.RecordedAt, map[string]float64{"soil_moisture": req.SoilMoisture, "temperature": req.Temperature, "humidity": req.Humidity}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *sensorReadingRepository) List(ctx context.Context, filter SensorReadingFilter) ([]SensorReading, int, error) {

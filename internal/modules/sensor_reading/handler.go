@@ -3,6 +3,7 @@ package sensorreading
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	responsehandler "capstone-be/internal/utils"
 
@@ -24,6 +25,10 @@ func (h *SensorReadingHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if req.SensorID <= 0 || req.RecordedAt.After(time.Now().Add(5*time.Minute)) {
+		c.JSON(400, gin.H{"error": "invalid sensor or future recorded_at"})
+		return
+	}
 	if err := h.service.Create(c.Request.Context(), req); err != nil {
 		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to create sensor reading", err.Error())
 		return
