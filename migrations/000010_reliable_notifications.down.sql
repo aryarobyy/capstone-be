@@ -1,0 +1,10 @@
+DROP INDEX sensor_readings_sensor_recorded_idx;
+DROP TABLE alert_states;
+DROP TABLE alert_rules;
+DROP TABLE notification_deliveries;
+ALTER TABLE notifications DROP COLUMN event_key, DROP COLUMN image_url;
+ALTER TABLE sessions DROP COLUMN refresh_hash;
+ALTER TABLE device_tokens DROP COLUMN installation_id;
+ALTER TABLE sensors DROP COLUMN api_key_hash;
+ALTER TABLE areas DROP COLUMN owner_id;
+ALTER TABLE users DROP COLUMN is_admin;
