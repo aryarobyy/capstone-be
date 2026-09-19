@@ -3,7 +3,7 @@ package sensor
 import "time"
 
 type CreateSensorRequest struct {
-	AreaID      int64   `json:"area_id"`
+	AreaID      *int64  `json:"area_id" binding:"omitempty"`
 	Name        string  `json:"name" binding:"required"`
 	Code        string  `json:"code" binding:"required"`
 	Description *string `json:"description" binding:"omitempty"`

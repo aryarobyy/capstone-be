@@ -29,7 +29,7 @@ func NewSensorRepository(db *sql.DB) SensorRepository {
 }
 
 func (r *sensoriRepository) Create(ctx context.Context, req CreateSensorRequest) (int64, error) {
-	query := `INSERT INTO sensors (area_id, name, code, description) VALUES ($1, $2, $3, $4) RETURNING id`
+	query := `INSERT INTO sensors (area_id, name, code, description) VALUES (COALESCE($1, 0), $2, $3, $4) RETURNING id`
 	var id int64
 	err := r.db.QueryRowContext(ctx, query, req.AreaID, req.Name, req.Code, req.Description).Scan(&id)
 	if err != nil {

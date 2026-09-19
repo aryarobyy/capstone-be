@@ -166,9 +166,24 @@ func TestSensorService_Create_AreaValidation(t *testing.T) {
 	}
 	svc := NewSensorService(mockRepo, mockAreaRepo)
 
-	t.Run("Create with AreaID == 0 succeeds without checking area", func(t *testing.T) {
+	t.Run("Create with AreaID == nil succeeds without checking area", func(t *testing.T) {
 		res, err := svc.Create(context.Background(), CreateSensorRequest{
-			AreaID: 0,
+			AreaID: nil,
+			Name:   "Sensor Without Area (nil)",
+			Code:   "S-00-nil",
+		})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil response")
+		}
+	})
+
+	t.Run("Create with AreaID == 0 succeeds without checking area", func(t *testing.T) {
+		zero := int64(0)
+		res, err := svc.Create(context.Background(), CreateSensorRequest{
+			AreaID: &zero,
 			Name:   "Sensor Without Area",
 			Code:   "S-00",
 		})
@@ -181,8 +196,9 @@ func TestSensorService_Create_AreaValidation(t *testing.T) {
 	})
 
 	t.Run("Create with existing AreaID succeeds", func(t *testing.T) {
+		validAreaID := int64(1)
 		res, err := svc.Create(context.Background(), CreateSensorRequest{
-			AreaID: 1,
+			AreaID: &validAreaID,
 			Name:   "Sensor With Valid Area",
 			Code:   "S-01",
 		})
@@ -195,8 +211,9 @@ func TestSensorService_Create_AreaValidation(t *testing.T) {
 	})
 
 	t.Run("Create with non-existent AreaID returns ErrAreaNotFound", func(t *testing.T) {
+		invalidAreaID := int64(2)
 		_, err := svc.Create(context.Background(), CreateSensorRequest{
-			AreaID: 2,
+			AreaID: &invalidAreaID,
 			Name:   "Sensor With Invalid Area",
 			Code:   "S-02",
 		})

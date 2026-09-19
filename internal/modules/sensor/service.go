@@ -44,8 +44,8 @@ func toSensorResponse(s *Sensor) *SensorResponse {
 }
 
 func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*SensorResponse, error) {
-	if req.AreaID != 0 {
-		exists, err := s.areaRepo.Exists(ctx, req.AreaID)
+	if req.AreaID != nil && *req.AreaID != 0 {
+		exists, err := s.areaRepo.Exists(ctx, *req.AreaID)
 		if err != nil {
 			return nil, err
 		}
