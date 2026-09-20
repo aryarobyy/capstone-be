@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   test-and-migrate-check:
@@ -14,9 +15,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: ${{ secrets.DB_USERNAME}}
+          POSTGRES_USER: ${{ secrets.DB_USERNAME }}
           POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.DB_NAME}}
+          POSTGRES_DB: ${{ secrets.DB_NAME }}
         ports:
           - 5432:5432
         options: >-
@@ -37,19 +38,20 @@ jobs:
       - name: Run Unit Tests
         run: go test -v ./...
 
-      - name: Check Database Migrations (Up & Down)
+      - name: Run Database Migrations (Up, Status, Down, Up)
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 5432
-          DB_USER: ${{ secrets.DB_USERNAME}}
+          DB_USER: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME}}
+          DB_NAME: ${{ secrets.DB_NAME }}
           DB_SSLMODE: disable
           DB_TIMEZONE: UTC
         run: |
-          go run cmd/migrate/main.go up
-          go run cmd/migrate/main.go down
-          go run cmd/migrate/main.go up
+          make migrate-up
+          make migrate-status
+          make migrate-down
+          make migrate-up
 
   deploy:
     name: Deploy to Server
@@ -86,7 +88,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           port: ${{ secrets.SSH_PORT || 22 }}
           key: ${{ secrets.SSH_KEY }}
-          source: "app,migrate,migrations"
+          source: "app,migrate,migrations,Makefile"
           target: "/home/${{ secrets.USERNAME }}/app/capstone-be"
           
       - name: Run migrations and restart service
@@ -100,4 +102,5 @@ jobs:
             cd /home/${{ secrets.USERNAME }}/app/capstone-be
             chmod +x app migrate
             ./migrate up
+            ./migrate status
             sudo systemctl restart capstone-be

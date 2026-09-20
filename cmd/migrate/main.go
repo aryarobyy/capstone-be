@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"capstone-be/config"
@@ -14,6 +15,13 @@ import (
 )
 
 const migrationsDir = "migrations"
+
+type Migration struct {
+	Version  int
+	Name     string
+	UpFile   string
+	DownFile string
+}
 
 func main() {
 	action := "up"
@@ -45,70 +53,185 @@ func main() {
 		if err := runDown(db); err != nil {
 			log.Fatalf("Migration down failed: %v", err)
 		}
+	case "status":
+		if err := runStatus(db); err != nil {
+			log.Fatalf("Migration status failed: %v", err)
+		}
 	default:
-		log.Fatalf("Unknown action: %s. Use 'up' or 'down'", action)
+		log.Fatalf("Unknown action: %s. Use 'up', 'down', or 'status'", action)
 	}
 }
 
 func createMigrationsTable(db *sql.DB) error {
 	query := `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
+		CREATE TABLE IF NOT EXISTS migrations (
 			version VARCHAR(255) PRIMARY KEY,
+			failed VARCHAR(100),
 			applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 		);
 	`
-	_, err := db.Exec(query)
+	if _, err := db.Exec(query); err != nil {
+		return err
+	}
+
+	var count int
+	_ = db.QueryRow("SELECT COUNT(*) FROM migrations").Scan(&count)
+	if count > 1 {
+		rows, err := db.Query("SELECT version FROM migrations")
+		if err == nil {
+			maxVer := 0
+			for rows.Next() {
+				var v string
+				if err := rows.Scan(&v); err == nil {
+					if n, err := parseVersion(v); err == nil && n > maxVer {
+						maxVer = n
+					}
+				}
+			}
+			rows.Close()
+
+			if maxVer > 0 {
+				_, _ = db.Exec("DELETE FROM migrations")
+				_, _ = db.Exec("INSERT INTO migrations (version, failed, applied_at) VALUES ($1, $2, NOW())", strconv.Itoa(maxVer), "false")
+			}
+		}
+	}
+
+	return nil
+}
+
+func parseVersion(str string) (int, error) {
+	str = strings.TrimSpace(str)
+	if idx := strings.Index(str, "_"); idx != -1 {
+		str = str[:idx]
+	}
+	return strconv.Atoi(str)
+}
+
+func loadMigrationFiles() ([]Migration, error) {
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read migrations directory: %w", err)
+	}
+
+	upMap := make(map[int]string)
+	downMap := make(map[int]string)
+	nameMap := make(map[int]string)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, ".up.sql") {
+			ver, err := parseVersion(name)
+			if err != nil {
+				continue
+			}
+			upMap[ver] = name
+			base := strings.TrimSuffix(name, ".up.sql")
+			if idx := strings.Index(base, "_"); idx != -1 {
+				nameMap[ver] = base[idx+1:]
+			} else {
+				nameMap[ver] = base
+			}
+		} else if strings.HasSuffix(name, ".down.sql") {
+			ver, err := parseVersion(name)
+			if err != nil {
+				continue
+			}
+			downMap[ver] = name
+		}
+	}
+
+	var list []Migration
+	for ver, upFile := range upMap {
+		list = append(list, Migration{
+			Version:  ver,
+			Name:     nameMap[ver],
+			UpFile:   upFile,
+			DownFile: downMap[ver],
+		})
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Version < list[j].Version
+	})
+
+	return list, nil
+}
+
+func getCurrentVersion(db *sql.DB) (int, string, error) {
+	var verStr string
+	var failed sql.NullString
+	err := db.QueryRow("SELECT version, failed FROM migrations LIMIT 1").Scan(&verStr, &failed)
+	if err == sql.ErrNoRows {
+		return 0, "false", nil
+	}
+	if err != nil {
+		return 0, "", err
+	}
+
+	ver, err := parseVersion(verStr)
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid version '%s' in migrations table: %w", verStr, err)
+	}
+
+	failedStr := "false"
+	if failed.Valid && failed.String != "" {
+		failedStr = failed.String
+	}
+
+	return ver, failedStr, nil
+}
+
+func setCurrentVersionTx(tx *sql.Tx, version int, failed string) error {
+	if _, err := tx.Exec("DELETE FROM migrations"); err != nil {
+		return err
+	}
+	if version <= 0 {
+		return nil
+	}
+	_, err := tx.Exec("INSERT INTO migrations (version, failed, applied_at) VALUES ($1, $2, NOW())", strconv.Itoa(version), failed)
 	return err
 }
 
-func getAppliedMigrations(db *sql.DB) (map[string]bool, error) {
-	rows, err := db.Query("SELECT version FROM schema_migrations")
-	if err != nil {
-		return nil, err
+func setCurrentVersionDB(db *sql.DB, version int, failed string) error {
+	if _, err := db.Exec("DELETE FROM migrations"); err != nil {
+		return err
 	}
-	defer rows.Close()
-
-	applied := make(map[string]bool)
-	for rows.Next() {
-		var version string
-		if err := rows.Scan(&version); err != nil {
-			return nil, err
-		}
-		applied[version] = true
+	if version <= 0 {
+		return nil
 	}
-	return applied, rows.Err()
+	_, err := db.Exec("INSERT INTO migrations (version, failed, applied_at) VALUES ($1, $2, NOW())", strconv.Itoa(version), failed)
+	return err
 }
 
 func runUp(db *sql.DB) error {
-	entries, err := os.ReadDir(migrationsDir)
+	currentVer, failed, err := getCurrentVersion(db)
 	if err != nil {
-		return fmt.Errorf("failed to read migrations directory: %w", err)
+		return fmt.Errorf("failed to get current migration version: %w", err)
 	}
 
-	applied, err := getAppliedMigrations(db)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve applied migrations: %w", err)
+	if failed != "false" && failed != "" {
+		log.Printf("WARNING: Current migration version %d is marked as failed (%s).", currentVer, failed)
 	}
 
-	var upFiles []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".up.sql") {
-			upFiles = append(upFiles, entry.Name())
-		}
+	migrations, err := loadMigrationFiles()
+	if err != nil {
+		return err
 	}
-	sort.Strings(upFiles)
 
 	appliedCount := 0
-	for _, file := range upFiles {
-		version := strings.TrimSuffix(file, ".up.sql")
-		if applied[version] {
-			continue
+	for _, m := range migrations {
+		if m.Version <= currentVer {
+			continue // Skip already applied migrations
 		}
 
-		filePath := filepath.Join(migrationsDir, file)
+		filePath := filepath.Join(migrationsDir, m.UpFile)
 		content, err := os.ReadFile(filePath)
 		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+			return fmt.Errorf("failed to read migration file %s: %w", m.UpFile, err)
 		}
 
 		tx, err := db.Begin()
@@ -118,51 +241,69 @@ func runUp(db *sql.DB) error {
 
 		if _, err := tx.Exec(string(content)); err != nil {
 			_ = tx.Rollback()
-			return fmt.Errorf("failed to execute migration %s: %w", file, err)
+			_ = setCurrentVersionDB(db, m.Version, "true")
+			return fmt.Errorf("failed to execute migration %s: %w", m.UpFile, err)
 		}
 
-		if _, err := tx.Exec("INSERT INTO schema_migrations (version) VALUES ($1)", version); err != nil {
+		if err := setCurrentVersionTx(tx, m.Version, "false"); err != nil {
 			_ = tx.Rollback()
-			return fmt.Errorf("failed to record migration %s: %w", file, err)
+			return fmt.Errorf("failed to record migration version: %w", err)
 		}
 
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit migration %s: %w", file, err)
+			return fmt.Errorf("failed to commit migration %s: %w", m.UpFile, err)
 		}
 
-		log.Printf("Applied migration: %s", file)
+		log.Printf("Applied migration version %d: %s", m.Version, m.UpFile)
 		appliedCount++
+		currentVer = m.Version
 	}
 
 	if appliedCount == 0 {
-		log.Println("Database schema is already up to date. No new migrations to apply.")
+		log.Printf("Database schema is already up to date (current version: %d). No new migrations to apply.", currentVer)
 	} else {
-		log.Printf("Successfully applied %d migration(s)", appliedCount)
+		log.Printf("Successfully applied %d migration(s). Database is now at version %d.", appliedCount, currentVer)
 	}
 	return nil
 }
 
 func runDown(db *sql.DB) error {
-	rows, err := db.Query("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1")
+	currentVer, _, err := getCurrentVersion(db)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve last migration: %w", err)
+		return fmt.Errorf("failed to get current migration version: %w", err)
 	}
-	defer rows.Close()
 
-	if !rows.Next() {
-		log.Println("No migrations to rollback.")
+	if currentVer <= 0 {
+		log.Println("No migrations to rollback (current version is 0).")
 		return nil
 	}
 
-	var lastVersion string
-	if err := rows.Scan(&lastVersion); err != nil {
+	migrations, err := loadMigrationFiles()
+	if err != nil {
 		return err
 	}
 
-	downFile := filepath.Join(migrationsDir, lastVersion+".down.sql")
-	content, err := os.ReadFile(downFile)
+	var currentMigration *Migration
+	prevVersion := 0
+	for _, m := range migrations {
+		if m.Version == currentVer {
+			cm := m
+			currentMigration = &cm
+			break
+		}
+		if m.Version < currentVer {
+			prevVersion = m.Version
+		}
+	}
+
+	if currentMigration == nil || currentMigration.DownFile == "" {
+		return fmt.Errorf("down migration file not found for version %d", currentVer)
+	}
+
+	downPath := filepath.Join(migrationsDir, currentMigration.DownFile)
+	content, err := os.ReadFile(downPath)
 	if err != nil {
-		return fmt.Errorf("down migration file not found: %s: %w", downFile, err)
+		return fmt.Errorf("failed to read down migration file %s: %w", currentMigration.DownFile, err)
 	}
 
 	tx, err := db.Begin()
@@ -172,18 +313,53 @@ func runDown(db *sql.DB) error {
 
 	if _, err := tx.Exec(string(content)); err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("failed to execute down migration %s: %w", downFile, err)
+		_ = setCurrentVersionDB(db, currentVer, "true")
+		return fmt.Errorf("failed to execute down migration %s: %w", currentMigration.DownFile, err)
 	}
 
-	if _, err := tx.Exec("DELETE FROM schema_migrations WHERE version = $1", lastVersion); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("failed to remove migration record %s: %w", lastVersion, err)
+	// Update version to previous version (e.g. 10 -> 9)
+	if err := setCurrentVersionTx(tx, prevVersion, "false"); err != nil {
+		if !strings.Contains(err.Error(), "does not exist") {
+			_ = tx.Rollback()
+			return fmt.Errorf("failed to update migration version: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit down migration: %w", err)
 	}
 
-	log.Printf("Successfully rolled back migration: %s", lastVersion)
+	log.Printf("Successfully rolled back migration version %d: %s. Current version is now %d.", currentVer, currentMigration.DownFile, prevVersion)
+	return nil
+}
+
+func runStatus(db *sql.DB) error {
+	currentVer, failed, err := getCurrentVersion(db)
+	if err != nil {
+		return fmt.Errorf("failed to get current migration version: %w", err)
+	}
+
+	migrations, err := loadMigrationFiles()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Current Database Version: %d | Failed: %s\n", currentVer, failed)
+	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("%-8s %-45s %-12s\n", "Version", "Migration File", "Status")
+	fmt.Println(strings.Repeat("-", 70))
+
+	appliedCount := 0
+	for _, m := range migrations {
+		status := "PENDING"
+		if m.Version <= currentVer {
+			status = "APPLIED"
+			appliedCount++
+		}
+		fmt.Printf("%-8d %-45s %-12s\n", m.Version, m.UpFile, status)
+	}
+	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("Total: %d | Applied: %d | Pending: %d\n", len(migrations), appliedCount, len(migrations)-appliedCount)
+
 	return nil
 }
