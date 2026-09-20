@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"capstone-be/internal/middleware"
 	"capstone-be/internal/modules/area"
 )
 
@@ -35,6 +36,7 @@ func toSensorResponse(s *Sensor) *SensorResponse {
 	return &SensorResponse{
 		ID:          s.ID,
 		AreaID:      s.AreaID,
+		OwnerID:     s.OwnerID,
 		Name:        s.Name,
 		Code:        s.Code,
 		Description: s.Description,
@@ -44,6 +46,12 @@ func toSensorResponse(s *Sensor) *SensorResponse {
 }
 
 func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*SensorResponse, error) {
+	if req.OwnerID == 0 {
+		if uid, ok := middleware.GetUserIDFromContext(ctx); ok {
+			req.OwnerID = uid
+		}
+	}
+
 	if req.AreaID != nil && *req.AreaID != 0 {
 		exists, err := s.areaRepo.Exists(ctx, *req.AreaID)
 		if err != nil {
@@ -58,7 +66,7 @@ func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*S
 	if err != nil {
 		return nil, err
 	}
-	sensor, err := s.repo.Detail(ctx, DetailSensorRequest{ID: id})
+	sensor, err := s.repo.Detail(ctx, DetailSensorRequest{ID: id, OwnerID: req.OwnerID})
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +74,12 @@ func (s *sensorService) Create(ctx context.Context, req CreateSensorRequest) (*S
 }
 
 func (s *sensorService) Update(ctx context.Context, req UpdateSensorRequest) (*SensorResponse, error) {
+	if req.OwnerID == 0 {
+		if uid, ok := middleware.GetUserIDFromContext(ctx); ok {
+			req.OwnerID = uid
+		}
+	}
+
 	if req.AreaID != nil && *req.AreaID != 0 {
 		exists, err := s.areaRepo.Exists(ctx, *req.AreaID)
 		if err != nil {
@@ -79,7 +93,7 @@ func (s *sensorService) Update(ctx context.Context, req UpdateSensorRequest) (*S
 	if err := s.repo.Update(ctx, req); err != nil {
 		return nil, err
 	}
-	sensor, err := s.repo.Detail(ctx, DetailSensorRequest{ID: req.ID})
+	sensor, err := s.repo.Detail(ctx, DetailSensorRequest{ID: req.ID, OwnerID: req.OwnerID})
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +101,21 @@ func (s *sensorService) Update(ctx context.Context, req UpdateSensorRequest) (*S
 }
 
 func (s *sensorService) Delete(ctx context.Context, req DeleteSensorRequest) error {
+	if req.OwnerID == 0 {
+		if uid, ok := middleware.GetUserIDFromContext(ctx); ok {
+			req.OwnerID = uid
+		}
+	}
 	return s.repo.Delete(ctx, req)
 }
 
 func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListSensorResponse, error) {
+	if req.OwnerID == 0 {
+		if uid, ok := middleware.GetUserIDFromContext(ctx); ok {
+			req.OwnerID = uid
+		}
+	}
+
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 10
@@ -105,10 +130,11 @@ func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListS
 	}
 
 	sensors, count, err := s.repo.List(ctx, SensorFilter{
-		AreaID: req.AreaID,
-		Name:   req.Name,
-		Limit:  limit,
-		Index:  index,
+		OwnerID: req.OwnerID,
+		AreaID:  req.AreaID,
+		Name:    req.Name,
+		Limit:   limit,
+		Index:   index,
 	})
 	if err != nil {
 		return nil, err
@@ -119,6 +145,7 @@ func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListS
 		data = append(data, ListSensorData{
 			ID:          item.ID,
 			AreaID:      item.AreaID,
+			OwnerID:     item.OwnerID,
 			Name:        item.Name,
 			Code:        item.Code,
 			Description: item.Description,
@@ -136,6 +163,12 @@ func (s *sensorService) List(ctx context.Context, req ListSensorRequest) (*ListS
 }
 
 func (s *sensorService) Detail(ctx context.Context, req DetailSensorRequest) (*SensorResponse, error) {
+	if req.OwnerID == 0 {
+		if uid, ok := middleware.GetUserIDFromContext(ctx); ok {
+			req.OwnerID = uid
+		}
+	}
+
 	sensor, err := s.repo.Detail(ctx, req)
 	if err != nil {
 		return nil, err

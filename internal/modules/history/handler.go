@@ -20,7 +20,7 @@ func NewHistoryHandler(service HistoryService) *HistoryHandler {
 func (h *HistoryHandler) Create(c *gin.Context) {
 	var req CreateHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
@@ -36,13 +36,13 @@ func (h *HistoryHandler) Create(c *gin.Context) {
 func (h *HistoryHandler) List(c *gin.Context) {
 	var req ListHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
 	response, err := h.service.List(c.Request.Context(), req)
 	if err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve history", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve history", err)
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *HistoryHandler) List(c *gin.Context) {
 func (h *HistoryHandler) Detail(c *gin.Context) {
 	var req DetailHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *HistoryHandler) Detail(c *gin.Context) {
 func (h *HistoryHandler) Delete(c *gin.Context) {
 	var req DeleteHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
@@ -82,12 +82,12 @@ func (h *HistoryHandler) Delete(c *gin.Context) {
 
 func handleHistoryError(c *gin.Context, err error, message string) {
 	if errors.Is(err, ErrHistoryNotFound) {
-		responsehandler.ToErrorHandler(c, http.StatusNotFound, err.Error(), nil)
+		responsehandler.ToErrorHandler(c, http.StatusNotFound, "History record not found.", nil)
 		return
 	}
 	if errors.Is(err, ErrInvalidAnomalyStatus) {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, err.Error(), nil)
+		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid anomaly status.", nil)
 		return
 	}
-	responsehandler.ToErrorHandler(c, http.StatusInternalServerError, message, err.Error())
+	responsehandler.ToErrorHandler(c, http.StatusInternalServerError, message, err)
 }

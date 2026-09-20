@@ -108,11 +108,11 @@ type Area struct {
 
 func (s *Service) CreateArea(ctx context.Context, user int64, name string) (int64, error) {
 	var id int64
-	err := s.db.QueryRowContext(ctx, `INSERT INTO areas(name) VALUES($1) RETURNING id`, name).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `INSERT INTO areas(name, owner_id) VALUES($1, $2) RETURNING id`, name, user).Scan(&id)
 	return id, err
 }
 func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name FROM areas ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,name FROM areas WHERE owner_id = $1 ORDER BY id`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -130,5 +130,6 @@ func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
 
 // Assignment of legacy unowned areas is administrative and cannot be claimed by arbitrary users.
 func (s *Service) AssignArea(ctx context.Context, id, owner int64) error {
-	return nil
+	_, err := s.db.ExecContext(ctx, `UPDATE areas SET owner_id = $1 WHERE id = $2`, owner, id)
+	return err
 }

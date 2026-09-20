@@ -34,9 +34,9 @@ func (r *areaRepository) Exists(ctx context.Context, id int64) (bool, error) {
 }
 
 func (r *areaRepository) FindByID(ctx context.Context, id int64) (*Area, error) {
-	query := `SELECT id, farm_id, name, COALESCE(icon, ''), created_at, updated_at FROM areas WHERE id = $1`
+	query := `SELECT id, farm_id, COALESCE(owner_id, 0), name, COALESCE(icon, ''), created_at, updated_at FROM areas WHERE id = $1`
 	var a Area
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&a.ID, &a.FarmID, &a.Name, &a.Icon, &a.CreatedAt, &a.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&a.ID, &a.FarmID, &a.OwnerID, &a.Name, &a.Icon, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrAreaNotFound

@@ -1,0 +1,5 @@
+ALTER TABLE sensors ADD COLUMN IF NOT EXISTS owner_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_sensors_owner_id ON sensors(owner_id);
+
+ALTER TABLE areas ADD COLUMN IF NOT EXISTS owner_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_areas_owner_id ON areas(owner_id);

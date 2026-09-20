@@ -22,7 +22,7 @@ func NewAuthHandler(service AuthService) *AuthHandler {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
@@ -32,7 +32,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			responsehandler.ToErrorHandler(c, http.StatusConflict, err.Error(), nil)
 			return
 		}
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to register user", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to register user", err)
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
@@ -56,7 +56,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			responsehandler.ToErrorHandler(c, http.StatusUnauthorized, err.Error(), nil)
 			return
 		}
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to login", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to login", err)
 		return
 	}
 

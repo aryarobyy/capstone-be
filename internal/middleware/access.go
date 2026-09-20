@@ -66,12 +66,12 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 }
 func ownsArea(c *gin.Context, db *sql.DB, user, id int64) (bool, error) {
 	var ok bool
-	err := db.QueryRowContext(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM areas WHERE id=$1)`, id).Scan(&ok)
+	err := db.QueryRowContext(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM areas WHERE id=$1 AND owner_id=$2)`, id, user).Scan(&ok)
 	return ok, err
 }
 func ownsSensor(c *gin.Context, db *sql.DB, user, id int64) (bool, error) {
 	var ok bool
-	err := db.QueryRowContext(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM sensors WHERE id=$1)`, id).Scan(&ok)
+	err := db.QueryRowContext(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM sensors WHERE id=$1 AND owner_id=$2)`, id, user).Scan(&ok)
 	return ok, err
 }
 

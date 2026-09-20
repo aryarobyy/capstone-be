@@ -5,6 +5,7 @@ import "time"
 type Sensor struct {
 	ID          int64     `json:"id"`
 	AreaID      int64     `json:"area_id"`
+	OwnerID     int64     `json:"owner_id"`
 	Name        string    `json:"name"`
 	Code        string    `json:"code"`
 	Description string    `json:"description"`

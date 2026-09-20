@@ -3,6 +3,7 @@ package sensor
 import "time"
 
 type CreateSensorRequest struct {
+	OwnerID     int64   `json:"-"`
 	AreaID      *int64  `json:"area_id" binding:"omitempty"`
 	Name        string  `json:"name" binding:"required"`
 	Code        string  `json:"code" binding:"required"`
@@ -11,6 +12,7 @@ type CreateSensorRequest struct {
 
 type UpdateSensorRequest struct {
 	ID          int64   `json:"id" binding:"required"`
+	OwnerID     int64   `json:"-"`
 	AreaID      *int64  `json:"area_id" binding:"omitempty"`
 	Code        *string `json:"code" binding:"omitempty"`
 	Name        *string `json:"name" binding:"omitempty"`
@@ -18,30 +20,35 @@ type UpdateSensorRequest struct {
 }
 
 type DetailSensorRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	ID      int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
 }
 
 type ListSensorRequest struct {
-	AreaID int64  `json:"area_id"`
-	Name   string `json:"name"`
-	Limit  int    `json:"limit"`
-	Index  int    `json:"index"`
+	OwnerID int64  `json:"-"`
+	AreaID  int64  `json:"area_id"`
+	Name    string `json:"name"`
+	Limit   int    `json:"limit"`
+	Index   int    `json:"index"`
 }
 
 type SensorFilter struct {
-	AreaID int64
-	Name   string
-	Limit  int
-	Index  int
+	OwnerID int64
+	AreaID  int64
+	Name    string
+	Limit   int
+	Index   int
 }
 
 type DeleteSensorRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	ID      int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
 }
 
 type ListSensorData struct {
 	ID          int64     `json:"id"`
 	AreaID      int64     `json:"area_id"`
+	OwnerID     int64     `json:"owner_id"`
 	Name        string    `json:"name"`
 	Code        string    `json:"code"`
 	Description string    `json:"description"`
@@ -59,6 +66,7 @@ type ListSensorResponse struct {
 type SensorResponse struct {
 	ID          int64     `json:"id"`
 	AreaID      int64     `json:"area_id"`
+	OwnerID     int64     `json:"owner_id"`
 	Name        string    `json:"name"`
 	Code        string    `json:"code"`
 	Description string    `json:"description"`

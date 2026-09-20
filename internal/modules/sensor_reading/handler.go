@@ -21,16 +21,16 @@ func NewSensorReadingHandler(service SensorReadingService) *SensorReadingHandler
 func (h *SensorReadingHandler) Create(c *gin.Context) {
 	var req CreateSensorReadingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
 	if req.SensorID <= 0 || req.RecordedAt.After(time.Now().Add(5*time.Minute)) {
-		c.JSON(400, gin.H{"error": "invalid sensor or future recorded_at"})
+		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid sensor ID or future recorded timestamp.", nil)
 		return
 	}
 	if err := h.service.Create(c.Request.Context(), req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to create sensor reading", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to create sensor reading", err)
 		return
 	}
 
@@ -40,13 +40,13 @@ func (h *SensorReadingHandler) Create(c *gin.Context) {
 func (h *SensorReadingHandler) List(c *gin.Context) {
 	var req ListSensorReadingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
 	res, err := h.service.List(c.Request.Context(), req)
 	if err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve sensor readings", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve sensor readings", err)
 		return
 	}
 
@@ -56,17 +56,17 @@ func (h *SensorReadingHandler) List(c *gin.Context) {
 func (h *SensorReadingHandler) Detail(c *gin.Context) {
 	var req DetailSensorReadingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
 	res, err := h.service.Detail(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrSensorReadingNotFound) {
-			responsehandler.ToErrorHandler(c, http.StatusNotFound, err.Error(), nil)
+			responsehandler.ToErrorHandler(c, http.StatusNotFound, "Sensor reading not found.", nil)
 			return
 		}
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve sensor reading detail", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve sensor reading detail", err)
 		return
 	}
 
@@ -76,17 +76,17 @@ func (h *SensorReadingHandler) Detail(c *gin.Context) {
 func (h *SensorReadingHandler) Delete(c *gin.Context) {
 	var req DeleteSensorReadingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		responsehandler.ToErrorHandler(c, http.StatusBadRequest, "Invalid request body", err.Error())
+		responsehandler.ToValidationError(c, err)
 		return
 	}
 
 	err := h.service.Delete(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrSensorReadingNotFound) {
-			responsehandler.ToErrorHandler(c, http.StatusNotFound, err.Error(), nil)
+			responsehandler.ToErrorHandler(c, http.StatusNotFound, "Sensor reading not found.", nil)
 			return
 		}
-		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to delete sensor reading", err.Error())
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to delete sensor reading", err)
 		return
 	}
 

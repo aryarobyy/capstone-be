@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"capstone-be/internal/middleware"
 	"capstone-be/internal/modules/area"
 )
 
 type mockSensorRepository struct {
+	capturedCreate CreateSensorRequest
 	capturedFilter SensorFilter
 	sensors        []Sensor
 	total          int
@@ -18,6 +20,7 @@ type mockSensorRepository struct {
 }
 
 func (m *mockSensorRepository) Create(ctx context.Context, req CreateSensorRequest) (int64, error) {
+	m.capturedCreate = req
 	return 1, m.err
 }
 
@@ -258,4 +261,39 @@ func TestSensorService_Update_AreaValidation(t *testing.T) {
 		}
 	})
 }
+
+func TestSensorService_OwnerID_Scoping(t *testing.T) {
+	mockRepo := &mockSensorRepository{}
+	mockAreaRepo := &mockAreaRepository{}
+	svc := NewSensorService(mockRepo, mockAreaRepo)
+
+	t.Run("Create automatically takes OwnerID from context", func(t *testing.T) {
+		ctx := middleware.WithUserID(context.Background(), 42)
+		res, err := svc.Create(ctx, CreateSensorRequest{
+			Name: "Sensor A",
+			Code: "S-A",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil response")
+		}
+		if mockRepo.capturedCreate.OwnerID != 42 {
+			t.Errorf("expected capturedCreate.OwnerID to be 42, got %d", mockRepo.capturedCreate.OwnerID)
+		}
+	})
+
+	t.Run("List scopes filter to OwnerID from context", func(t *testing.T) {
+		ctx := middleware.WithUserID(context.Background(), 99)
+		_, err := svc.List(ctx, ListSensorRequest{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mockRepo.capturedFilter.OwnerID != 99 {
+			t.Errorf("expected capturedFilter.OwnerID to be 99, got %d", mockRepo.capturedFilter.OwnerID)
+		}
+	})
+}
+
 

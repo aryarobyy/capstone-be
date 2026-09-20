@@ -1,20 +1,23 @@
 package middleware
 
 import (
-	"capstone-be/internal/session"
+	"context"
 	"errors"
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
 
+	"capstone-be/internal/session"
 	"capstone-be/internal/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-const SessionIDKey = "session_id"
-
-const UserIDKey = "user_id"
+const (
+	UserIDKey    = "user_id"
+	SessionIDKey = "session_id"
+	TokenKey     = "token"
+)
 
 func JWTAuth(tokens *token.Manager, sessions session.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -40,12 +43,48 @@ func JWTAuth(tokens *token.Manager, sessions session.Store) gin.HandlerFunc {
 			}
 			return
 		}
+
 		c.Set(SessionIDKey, sid)
 		c.Set(UserIDKey, id)
+		c.Set(TokenKey, fields[1])
+
+		ctx := context.WithValue(c.Request.Context(), UserIDKey, id)
+		ctx = context.WithValue(ctx, TokenKey, fields[1])
+		ctx = context.WithValue(ctx, SessionIDKey, sid)
+		c.Request = c.Request.WithContext(ctx)
+
 		c.Next()
 	}
 }
+
 func rejectJWT(c *gin.Context) {
 	c.Header("WWW-Authenticate", "Bearer")
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "valid access token required"})
+}
+
+// GetUserIDFromContext retrieves the user ID from a context.Context
+func GetUserIDFromContext(ctx context.Context) (int64, bool) {
+	if ctx == nil {
+		return 0, false
+	}
+	if val, ok := ctx.Value(UserIDKey).(int64); ok {
+		return val, true
+	}
+	return 0, false
+}
+
+// GetTokenFromContext retrieves the bearer token string from a context.Context
+func GetTokenFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	if val, ok := ctx.Value(TokenKey).(string); ok {
+		return val, true
+	}
+	return "", false
+}
+
+// WithUserID returns a child context with the given user ID attached
+func WithUserID(ctx context.Context, userID int64) context.Context {
+	return context.WithValue(ctx, UserIDKey, userID)
 }
