@@ -38,7 +38,7 @@ func main() {
 		log.Fatalf("Failed to load configurations: %v", err)
 	}
 
-	tokens, err := token.NewAccessManager(cfg.JWTSecret, cfg.JWTAccessMinutes)
+	tokens, err := token.NewManager(cfg.JWTSecret, cfg.JWTExpirationHours)
 	if err != nil {
 		log.Fatalf("Invalid JWT configuration: %v", err)
 	}
@@ -106,6 +106,17 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	workerDone := make(chan struct{})
 	go func() { defer close(workerDone); worker.Run(workerCtx) }()
+
+	calcInterval := 1 * time.Minute
+	if intervalStr := os.Getenv("SENSOR_CALC_INTERVAL"); intervalStr != "" {
+		if d, err := time.ParseDuration(intervalStr); err == nil && d > 0 {
+			calcInterval = d
+		}
+	}
+	sensorReadingRepo := sensorreading.NewSensorReadingRepository(db)
+	sensorCalcWorker := sensorreading.NewPeriodicCalcWorker(sensorReadingRepo, calcInterval, 10)
+	go sensorCalcWorker.Run(workerCtx)
+
 	defer stopWorker()
 
 	serverAddr := ":" + cfg.Port

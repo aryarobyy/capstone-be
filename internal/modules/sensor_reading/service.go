@@ -9,6 +9,7 @@ type SensorReadingService interface {
 	List(ctx context.Context, req ListSensorReadingRequest) (*ListSensorReadingResponse, error)
 	Detail(ctx context.Context, req DetailSensorReadingRequest) (*SensorReadingResponse, error)
 	Delete(ctx context.Context, req DeleteSensorReadingRequest) error
+	Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error)
 }
 
 type sensorReadingService struct {
@@ -88,3 +89,37 @@ func (s *sensorReadingService) Detail(ctx context.Context, req DetailSensorReadi
 func (s *sensorReadingService) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
 	return s.repo.Delete(ctx, req)
 }
+
+func (s *sensorReadingService) Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error) {
+	windowMinutes := req.WindowMinutes
+	if windowMinutes <= 0 {
+		windowMinutes = 10
+	}
+
+	// 1. Check in-memory cache if window is default 10 minutes and specific sensor is requested
+	if windowMinutes == 10 && req.SensorID > 0 {
+		if cached, ok := GlobalSummaryCache.Get(req.SensorID); ok {
+			return &SensorSummaryResponse{
+				WindowMinutes: windowMinutes,
+				Data:          []SensorSummaryItem{cached},
+			}, nil
+		}
+	}
+
+	// 2. Fetch fresh calculation from repository
+	data, err := s.repo.CalculateSummary(ctx, req.SensorID, ownerID, windowMinutes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update cache with fresh data
+	if windowMinutes == 10 && len(data) > 0 {
+		GlobalSummaryCache.SetBulk(data)
+	}
+
+	return &SensorSummaryResponse{
+		WindowMinutes: windowMinutes,
+		Data:          data,
+	}, nil
+}
+

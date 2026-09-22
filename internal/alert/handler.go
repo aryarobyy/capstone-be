@@ -34,8 +34,15 @@ func (h *Handler) SaveRule(c *gin.Context) {
 	c.Status(204)
 }
 func (h *Handler) Rules(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Query("sensor_id"), 10, 64)
-	if err != nil || id <= 0 {
+	var req struct {
+		SensorID int64 `json:"sensor_id"`
+	}
+	var id int64
+	if err := c.ShouldBindJSON(&req); err == nil && req.SensorID > 0 {
+		id = req.SensorID
+	} else if qID, err := strconv.ParseInt(c.Query("sensor_id"), 10, 64); err == nil && qID > 0 {
+		id = qID
+	} else {
 		c.Status(400)
 		return
 	}

@@ -13,8 +13,9 @@ import (
 )
 
 type mockSensorReadingService struct {
-	listResponse *ListSensorReadingResponse
-	err          error
+	listResponse    *ListSensorReadingResponse
+	summaryResponse *SensorSummaryResponse
+	err             error
 }
 
 func (m *mockSensorReadingService) Create(ctx context.Context, req CreateSensorReadingRequest) error {
@@ -31,6 +32,10 @@ func (m *mockSensorReadingService) Detail(ctx context.Context, req DetailSensorR
 
 func (m *mockSensorReadingService) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
 	return nil
+}
+
+func (m *mockSensorReadingService) Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error) {
+	return m.summaryResponse, m.err
 }
 
 func TestSensorReadingHandler_List(t *testing.T) {
@@ -107,3 +112,73 @@ func TestSensorReadingHandler_List(t *testing.T) {
 		t.Errorf("expected 1 item, got %d", len(resp.Data.Data))
 	}
 }
+
+func TestSensorReadingHandler_Summary(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	now := time.Now()
+	mockSvc := &mockSensorReadingService{
+		summaryResponse: &SensorSummaryResponse{
+			WindowMinutes: 10,
+			Data: []SensorSummaryItem{
+				{
+					SensorID:     1,
+					SensorName:   "Moisture GH1",
+					TotalSamples: 15,
+					Latest: LatestTelemetry{
+						SoilMoisture: 45.0,
+						Temperature:  28.0,
+						Humidity:     70.0,
+						RecordedAt:   now,
+					},
+					Average: TelemetryValues{
+						SoilMoisture: 44.5,
+						Temperature:  27.8,
+						Humidity:     69.5,
+					},
+					Status:       "OPTIMAL",
+					CalculatedAt: now,
+				},
+			},
+		},
+	}
+
+	handler := NewSensorReadingHandler(mockSvc)
+	router := gin.New()
+	router.POST("/api/sensor-reading/summary", handler.Summary)
+
+	body, _ := json.Marshal(SensorSummaryRequest{SensorID: 1, WindowMinutes: 10})
+	req, _ := http.NewRequest(http.MethodPost, "/api/sensor-reading/summary", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		Success bool                  `json:"success"`
+		Message string                `json:"message"`
+		Data    SensorSummaryResponse `json:"data"`
+	}
+
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	if !resp.Success {
+		t.Errorf("expected success to be true")
+	}
+	if len(resp.Data.Data) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(resp.Data.Data))
+	}
+	if resp.Data.Data[0].SensorID != 1 {
+		t.Errorf("expected sensor_id 1, got %d", resp.Data.Data[0].SensorID)
+	}
+	if resp.Data.Data[0].Status != "OPTIMAL" {
+		t.Errorf("expected status OPTIMAL, got %s", resp.Data.Data[0].Status)
+	}
+}
+

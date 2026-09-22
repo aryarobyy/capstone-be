@@ -8,7 +8,7 @@ import (
 )
 
 func TestIssueVerify(t *testing.T) {
-	m, err := NewManager(strings.Repeat("a", 32), 72)
+	m, err := NewManager(strings.Repeat("a", 32), 168)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestIssueVerify(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, err := m.Verify(raw)
-	if err != nil || id != 42 || seconds != 259200 {
+	if err != nil || id != 42 || seconds != 604800 {
 		t.Fatalf("id=%d seconds=%d err=%v", id, seconds, err)
 	}
 }

@@ -62,7 +62,6 @@ func rejectJWT(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "valid access token required"})
 }
 
-// GetUserIDFromContext retrieves the user ID from a context.Context
 func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	if ctx == nil {
 		return 0, false
@@ -73,7 +72,6 @@ func GetUserIDFromContext(ctx context.Context) (int64, bool) {
 	return 0, false
 }
 
-// GetTokenFromContext retrieves the bearer token string from a context.Context
 func GetTokenFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
@@ -84,7 +82,6 @@ func GetTokenFromContext(ctx context.Context) (string, bool) {
 	return "", false
 }
 
-// WithUserID returns a child context with the given user ID attached
 func WithUserID(ctx context.Context, userID int64) context.Context {
 	return context.WithValue(ctx, UserIDKey, userID)
 }

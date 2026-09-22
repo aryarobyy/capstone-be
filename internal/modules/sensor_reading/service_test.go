@@ -9,6 +9,7 @@ import (
 type mockSensorReadingRepository struct {
 	capturedFilter SensorReadingFilter
 	readings       []SensorReading
+	summaryItems   []SensorSummaryItem
 	total          int
 	err            error
 }
@@ -28,6 +29,10 @@ func (m *mockSensorReadingRepository) Detail(ctx context.Context, req DetailSens
 
 func (m *mockSensorReadingRepository) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
 	return nil
+}
+
+func (m *mockSensorReadingRepository) CalculateSummary(ctx context.Context, sensorID int64, ownerID int64, windowMinutes int) ([]SensorSummaryItem, error) {
+	return m.summaryItems, m.err
 }
 
 func TestSensorReadingService_List_Pagination(t *testing.T) {
@@ -161,3 +166,49 @@ func TestSensorReadingService_List_DataMapping(t *testing.T) {
 		t.Errorf("data mapping mismatch: %+v", item)
 	}
 }
+
+func TestSensorReadingService_Summary(t *testing.T) {
+	now := time.Now()
+	mockRepo := &mockSensorReadingRepository{
+		summaryItems: []SensorSummaryItem{
+			{
+				SensorID:     1,
+				SensorName:   "Greenhouse Sensor 1",
+				TotalSamples: 20,
+				Latest: LatestTelemetry{
+					SoilMoisture: 50.0,
+					Temperature:  28.5,
+					Humidity:     70.0,
+					RecordedAt:   now,
+				},
+				Average: TelemetryValues{
+					SoilMoisture: 49.0,
+					Temperature:  28.0,
+					Humidity:     69.0,
+				},
+				Status:       "OPTIMAL",
+				CalculatedAt: now,
+			},
+		},
+	}
+	svc := NewSensorReadingService(mockRepo)
+
+	res, err := svc.Summary(context.Background(), SensorSummaryRequest{SensorID: 1, WindowMinutes: 10}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if res.WindowMinutes != 10 {
+		t.Errorf("expected window_minutes 10, got %d", res.WindowMinutes)
+	}
+	if len(res.Data) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(res.Data))
+	}
+	if res.Data[0].SensorID != 1 {
+		t.Errorf("expected sensor_id 1, got %d", res.Data[0].SensorID)
+	}
+	if res.Data[0].Status != "OPTIMAL" {
+		t.Errorf("expected status OPTIMAL, got %s", res.Data[0].Status)
+	}
+}
+

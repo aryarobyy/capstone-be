@@ -1,13 +1,13 @@
 package middleware
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
-// RateLimit bounds both request rates and memory. Use a shared limiter at the proxy for multiple replicas.
 func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 	type bucket struct {
 		count int

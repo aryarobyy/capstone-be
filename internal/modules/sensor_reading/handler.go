@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"capstone-be/internal/middleware"
 	responsehandler "capstone-be/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,18 @@ type SensorReadingHandler struct {
 
 func NewSensorReadingHandler(service SensorReadingService) *SensorReadingHandler {
 	return &SensorReadingHandler{service: service}
+}
+
+func getUserID(c *gin.Context) int64 {
+	if uid, ok := middleware.GetUserIDFromContext(c.Request.Context()); ok {
+		return uid
+	}
+	if val, exists := c.Get(middleware.UserIDKey); exists {
+		if uid, ok := val.(int64); ok {
+			return uid
+		}
+	}
+	return 0
 }
 
 func (h *SensorReadingHandler) Create(c *gin.Context) {
@@ -92,3 +105,20 @@ func (h *SensorReadingHandler) Delete(c *gin.Context) {
 
 	responsehandler.ToSuccessHandler[any](c, http.StatusOK, "Sensor reading deleted successfully", nil)
 }
+
+func (h *SensorReadingHandler) Summary(c *gin.Context) {
+	var req SensorSummaryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req = SensorSummaryRequest{WindowMinutes: 10}
+	}
+
+	ownerID := getUserID(c)
+	res, err := h.service.Summary(c.Request.Context(), req, ownerID)
+	if err != nil {
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to retrieve sensor reading summary", err)
+		return
+	}
+
+	responsehandler.ToSuccessHandler(c, http.StatusOK, "Sensor reading summary retrieved successfully", res)
+}
+

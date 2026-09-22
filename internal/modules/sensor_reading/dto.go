@@ -47,3 +47,40 @@ type SensorReadingFilter struct {
 	Limit    int
 	Index    int
 }
+
+type SensorSummaryRequest struct {
+	SensorID      int64 `json:"sensor_id"`
+	WindowMinutes int   `json:"window_minutes"`
+}
+
+type TelemetryValues struct {
+	SoilMoisture float64 `json:"soil_moisture"`
+	Temperature  float64 `json:"temperature"`
+	Humidity     float64 `json:"humidity"`
+}
+
+type LatestTelemetry struct {
+	SoilMoisture float64   `json:"soil_moisture"`
+	Temperature  float64   `json:"temperature"`
+	Humidity     float64   `json:"humidity"`
+	RecordedAt   time.Time `json:"recorded_at"`
+}
+
+type SensorSummaryItem struct {
+	SensorID     int64           `json:"sensor_id"`
+	SensorName   string          `json:"sensor_name,omitempty"`
+	SensorCode   string          `json:"sensor_code,omitempty"`
+	AreaID       int64           `json:"area_id,omitempty"`
+	TotalSamples int             `json:"total_samples"`
+	Latest       LatestTelemetry `json:"latest"`
+	Average      TelemetryValues `json:"average"`
+	Min          TelemetryValues `json:"min"`
+	Max          TelemetryValues `json:"max"`
+	Status       string          `json:"status"`
+	CalculatedAt time.Time       `json:"calculated_at"`
+}
+
+type SensorSummaryResponse struct {
+	WindowMinutes int                 `json:"window_minutes"`
+	Data          []SensorSummaryItem `json:"data"`
+}

@@ -16,5 +16,6 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 		sensorReadingGroup.POST("/list", handler.List)
 		sensorReadingGroup.POST("/detail", handler.Detail)
 		sensorReadingGroup.POST("/delete", handler.Delete)
+		sensorReadingGroup.POST("/summary", handler.Summary)
 	}
 }
