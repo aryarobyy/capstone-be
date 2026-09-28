@@ -14,6 +14,7 @@ import (
 	"capstone-be/internal/database"
 	"capstone-be/internal/middleware"
 	"capstone-be/internal/modules/auth"
+	"capstone-be/internal/modules/dbdump"
 	"capstone-be/internal/modules/health"
 	"capstone-be/internal/modules/history"
 	"capstone-be/internal/modules/sensor"
@@ -96,8 +97,11 @@ func main() {
 	protected.Use(middleware.JWTAuth(tokens, sessions), middleware.ResourceAccess(db))
 	user.RegisterRoutes(protected, db)
 	sensor.RegisterRoutes(protected, db)
-	sensorreading.RegisterRoutes(protected, db)
+	sensorreading.RegisterRoutes(protected, apiGroup, db)
 	history.RegisterRoutes(protected, db)
+	adminOnly := apiGroup.Group("/database")
+	adminOnly.Use(middleware.JWTAuth(tokens, sessions), middleware.AdminOnly(db))
+	dbdump.RegisterRoutes(adminOnly, cfg)
 	configured := apiGroup.Group("")
 	configured.Use(middleware.JWTAuth(tokens, sessions))
 	alert.RegisterRoutes(configured, db)

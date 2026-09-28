@@ -6,11 +6,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
+func RegisterRoutes(router *gin.RouterGroup, apiGroup *gin.RouterGroup, db *sql.DB) {
 	repo := NewSensorReadingRepository(db)
 	service := NewSensorReadingService(repo)
 	handler := NewSensorReadingHandler(service)
 	sensorReadingGroup := router.Group("/sensor-reading")
+	apiGroup.POST("/sensor-reading/data/list", handler.List)
 	{
 		sensorReadingGroup.POST("/create", handler.Create)
 		sensorReadingGroup.POST("/list", handler.List)

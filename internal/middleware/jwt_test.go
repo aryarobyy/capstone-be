@@ -35,6 +35,14 @@ func TestJWTAuth(t *testing.T) {
 			t.Errorf("got %d, want %d", response.Code, tc.status)
 		}
 	}
+
+	// Test query param token
+	reqWithQuery := httptest.NewRequest("GET", "/private?token="+access, nil)
+	wQuery := httptest.NewRecorder()
+	router.ServeHTTP(wQuery, reqWithQuery)
+	if wQuery.Code != 204 {
+		t.Errorf("query token got %d, want 204", wQuery.Code)
+	}
 }
 
 type activeSession struct {

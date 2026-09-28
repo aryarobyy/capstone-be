@@ -21,12 +21,17 @@ const (
 
 func JWTAuth(tokens *token.Manager, sessions session.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var tokenStr string
 		fields := strings.Fields(c.GetHeader("Authorization"))
-		if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
+		if len(fields) == 2 && strings.EqualFold(fields[0], "Bearer") {
+			tokenStr = fields[1]
+		} else if qToken := c.Query("token"); qToken != "" {
+			tokenStr = qToken
+		} else {
 			rejectJWT(c)
 			return
 		}
-		id, sid, err := tokens.VerifySession(fields[1])
+		id, sid, err := tokens.VerifySession(tokenStr)
 		if err != nil {
 			rejectJWT(c)
 			return
@@ -46,10 +51,10 @@ func JWTAuth(tokens *token.Manager, sessions session.Store) gin.HandlerFunc {
 
 		c.Set(SessionIDKey, sid)
 		c.Set(UserIDKey, id)
-		c.Set(TokenKey, fields[1])
+		c.Set(TokenKey, tokenStr)
 
 		ctx := context.WithValue(c.Request.Context(), UserIDKey, id)
-		ctx = context.WithValue(ctx, TokenKey, fields[1])
+		ctx = context.WithValue(ctx, TokenKey, tokenStr)
 		ctx = context.WithValue(ctx, SessionIDKey, sid)
 		c.Request = c.Request.WithContext(ctx)
 
