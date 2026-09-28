@@ -91,10 +91,7 @@ func TestRegisterRoutes(t *testing.T) {
 
 	routes := r.Routes()
 	expectedRoutes := map[string]string{
-		"GET /database/dump":       "",
-		"POST /database/dump":      "",
-		"GET /database/dump-db":    "",
-		"POST /database/dump-db":   "",
+		"POST /database/dump": "",
 	}
 
 	for _, rt := range routes {
@@ -123,9 +120,9 @@ func TestHandlerDumpFailConnection(t *testing.T) {
 	}
 
 	handler := NewHandler(cfg)
-	r.GET("/dump", handler.Dump)
+	r.POST("/dump", handler.Dump)
 
-	req := httptest.NewRequest("GET", "/dump", nil)
+	req := httptest.NewRequest("POST", "/dump", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -149,9 +146,9 @@ func TestHandlerDumpSuccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	handler := NewHandler(cfg)
-	r.GET("/dump", handler.Dump)
+	r.POST("/dump", handler.Dump)
 
-	req := httptest.NewRequest("GET", "/dump?schema_only=true", nil)
+	req := httptest.NewRequest("POST", "/dump?schema_only=true", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
