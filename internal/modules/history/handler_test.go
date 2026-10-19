@@ -16,6 +16,7 @@ type mockHistoryService struct {
 	createResponse *HistoryResponse
 	listResponse   *ListHistoryResponse
 	detailResponse *HistoryResponse
+	newestResponse *HistoryResponse
 	err            error
 }
 
@@ -31,6 +32,13 @@ func (m *mockHistoryService) List(_ context.Context, _ ListHistoryRequest) (*Lis
 		return nil, m.err
 	}
 	return m.listResponse, nil
+}
+
+func (m *mockHistoryService) Newest(_ context.Context, _ NewestHistoryRequest) (*HistoryResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.newestResponse, nil
 }
 
 func (m *mockHistoryService) Detail(_ context.Context, _ DetailHistoryRequest) (*HistoryResponse, error) {
@@ -155,5 +163,35 @@ func TestHistoryHandler_Create_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHistoryHandler_Newest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockSvc := &mockHistoryService{newestResponse: &HistoryResponse{ID: 7, SensorID: 2}}
+	router := gin.New()
+	router.POST("/history/newest", NewHistoryHandler(mockSvc).Newest)
+
+	req, _ := http.NewRequest(http.MethodPost, "/history/newest", bytes.NewBufferString(`{"sensor_id":2}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var resp struct {
+		Data HistoryResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil || w.Code != http.StatusOK || resp.Data.ID != 7 {
+		t.Fatalf("expected 200 with id 7, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	mockSvc.err = ErrHistoryNotFound
+	req, _ = http.NewRequest(http.MethodPost, "/history/newest", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }

@@ -40,6 +40,13 @@ func (m *mockHistoryRepository) List(_ context.Context, filter HistoryFilter) ([
 	return m.histories, m.total, m.err
 }
 
+func (m *mockHistoryRepository) Newest(_ context.Context, _ NewestHistoryRequest) (*Anomaly, error) {
+	if len(m.histories) == 0 {
+		return nil, m.err
+	}
+	return &m.histories[0], m.err
+}
+
 func (m *mockHistoryRepository) Detail(_ context.Context, _ DetailHistoryRequest) (*Anomaly, error) {
 	if len(m.histories) == 0 {
 		return nil, m.err

@@ -49,6 +49,22 @@ func (h *HistoryHandler) List(c *gin.Context) {
 	responsehandler.ToSuccessHandler(c, http.StatusOK, "History retrieved successfully", response)
 }
 
+func (h *HistoryHandler) Newest(c *gin.Context) {
+	var req NewestHistoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		responsehandler.ToValidationError(c, err)
+		return
+	}
+
+	response, err := h.service.Newest(c.Request.Context(), req)
+	if err != nil {
+		handleHistoryError(c, err, "Failed to retrieve newest history")
+		return
+	}
+
+	responsehandler.ToSuccessHandler(c, http.StatusOK, "Newest history retrieved successfully", response)
+}
+
 func (h *HistoryHandler) Detail(c *gin.Context) {
 	var req DetailHistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

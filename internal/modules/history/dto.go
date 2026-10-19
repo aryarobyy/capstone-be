@@ -41,6 +41,11 @@ type ListHistoryResponse struct {
 	Index int               `json:"index"`
 }
 
+type NewestHistoryRequest struct {
+	SensorID  int64  `json:"sensor_id"`
+	Parameter string `json:"parameter"`
+}
+
 type DetailHistoryRequest struct {
 	ID int64 `json:"id" binding:"required"`
 }

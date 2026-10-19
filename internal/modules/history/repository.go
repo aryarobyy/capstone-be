@@ -16,6 +16,7 @@ var (
 type HistoryRepository interface {
 	Create(ctx context.Context, req CreateHistoryRequest) (*Anomaly, error)
 	List(ctx context.Context, filter HistoryFilter) ([]Anomaly, int, error)
+	Newest(ctx context.Context, req NewestHistoryRequest) (*Anomaly, error)
 	Detail(ctx context.Context, req DetailHistoryRequest) (*Anomaly, error)
 	Delete(ctx context.Context, req DeleteHistoryRequest) error
 }
@@ -149,6 +150,37 @@ func (r *historyRepository) List(ctx context.Context, filter HistoryFilter) ([]A
 	}
 
 	return histories, total, nil
+}
+
+func (r *historyRepository) Newest(ctx context.Context, req NewestHistoryRequest) (*Anomaly, error) {
+	query := `
+		SELECT
+			id,
+			sensor_id,
+			parameter,
+			started_at,
+			last_detected_at,
+			accumulated_duration,
+			status,
+			resolved_at,
+			created_at,
+			updated_at
+		FROM anomalies
+		WHERE ($1::bigint = 0 OR sensor_id = $1::bigint)
+			AND ($2::text = '' OR parameter = $2::text)
+		ORDER BY started_at DESC, id DESC
+		LIMIT 1
+	`
+
+	var anomaly Anomaly
+	if err := scanAnomaly(r.db.QueryRowContext(ctx, query, req.SensorID, req.Parameter), &anomaly); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrHistoryNotFound
+		}
+		return nil, err
+	}
+
+	return &anomaly, nil
 }
 
 func (r *historyRepository) Detail(ctx context.Context, req DetailHistoryRequest) (*Anomaly, error) {

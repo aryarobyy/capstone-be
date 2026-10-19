@@ -15,6 +15,7 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 	{
 		historyGroup.POST("/create", handler.Create)
 		historyGroup.POST("/list", handler.List)
+		historyGroup.POST("/newest", handler.Newest)
 		historyGroup.POST("/detail", handler.Detail)
 		historyGroup.POST("/delete", handler.Delete)
 	}

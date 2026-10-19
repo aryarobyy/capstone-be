@@ -5,6 +5,7 @@ import "context"
 type HistoryService interface {
 	Create(ctx context.Context, req CreateHistoryRequest) (*HistoryResponse, error)
 	List(ctx context.Context, req ListHistoryRequest) (*ListHistoryResponse, error)
+	Newest(ctx context.Context, req NewestHistoryRequest) (*HistoryResponse, error)
 	Detail(ctx context.Context, req DetailHistoryRequest) (*HistoryResponse, error)
 	Delete(ctx context.Context, req DeleteHistoryRequest) error
 }
@@ -72,6 +73,16 @@ func (s *historyService) List(ctx context.Context, req ListHistoryRequest) (*Lis
 		Limit: limit,
 		Index: index,
 	}, nil
+}
+
+func (s *historyService) Newest(ctx context.Context, req NewestHistoryRequest) (*HistoryResponse, error) {
+	anomaly, err := s.repo.Newest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	response := toHistoryResponse(anomaly)
+	return &response, nil
 }
 
 func (s *historyService) Detail(ctx context.Context, req DetailHistoryRequest) (*HistoryResponse, error) {
