@@ -17,6 +17,8 @@ func fail(c *gin.Context, err error) {
 		c.JSON(403, gin.H{"error": err.Error()})
 	case errors.Is(err, ErrInvalidRule):
 		c.JSON(400, gin.H{"error": err.Error()})
+	case errors.Is(err, ErrAreaNotFound):
+		c.JSON(404, gin.H{"error": "area not found"})
 	default:
 		c.JSON(500, gin.H{"error": "operation failed"})
 	}
@@ -92,6 +94,35 @@ func (h *Handler) Areas(c *gin.Context) {
 	}
 	c.JSON(200, rows)
 }
+func (h *Handler) UpdateArea(c *gin.Context) {
+	var r struct {
+		ID   int64  `json:"id" binding:"required,gt=0"`
+		Name string `json:"name" binding:"required,min=1,max=255"`
+	}
+	if c.ShouldBindJSON(&r) != nil {
+		c.Status(400)
+		return
+	}
+	if err := h.s.UpdateArea(c.Request.Context(), user(c), r.ID, r.Name); err != nil {
+		fail(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"message": "area updated"})
+}
+func (h *Handler) DeleteArea(c *gin.Context) {
+	var r struct {
+		ID int64 `json:"id" binding:"required,gt=0"`
+	}
+	if c.ShouldBindJSON(&r) != nil {
+		c.Status(400)
+		return
+	}
+	if err := h.s.DeleteArea(c.Request.Context(), user(c), r.ID); err != nil {
+		fail(c, err)
+		return
+	}
+	c.JSON(200, gin.H{"message": "area deleted"})
+}
 func (h *Handler) AssignArea(c *gin.Context) {
 	var r struct {
 		ID    int64 `json:"id" binding:"required,gt=0"`
@@ -107,3 +138,4 @@ func (h *Handler) AssignArea(c *gin.Context) {
 	}
 	c.Status(204)
 }
+
