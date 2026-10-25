@@ -16,5 +16,7 @@ func RegisterRoutes(api *gin.RouterGroup, db *sql.DB) {
 	api.POST("/areas", h.CreateArea)
 	api.POST("/areas/create", h.CreateArea)
 	api.POST("/areas/list", h.Areas)
+	api.POST("/areas/update", h.UpdateArea)
+	api.POST("/areas/delete", h.DeleteArea)
 	api.POST("/areas/owner", middleware.AdminOnly(db), h.AssignArea)
 }

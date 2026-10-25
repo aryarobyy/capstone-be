@@ -12,6 +12,7 @@ import (
 
 var ErrForbidden = errors.New("resource access denied")
 var ErrInvalidRule = errors.New("invalid alert rule")
+var ErrAreaNotFound = errors.New("area not found")
 
 type Service struct{ db *sql.DB }
 
@@ -126,6 +127,36 @@ func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+func (s *Service) UpdateArea(ctx context.Context, user, id int64, name string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE areas SET name = $1, updated_at = NOW() WHERE id = $2 AND owner_id = $3`, name, id, user)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrAreaNotFound
+	}
+	return nil
+}
+
+func (s *Service) DeleteArea(ctx context.Context, user, id int64) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM areas WHERE id = $1 AND owner_id = $2`, id, user)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrAreaNotFound
+	}
+	return nil
 }
 
 // Assignment of legacy unowned areas is administrative and cannot be claimed by arbitrary users.
