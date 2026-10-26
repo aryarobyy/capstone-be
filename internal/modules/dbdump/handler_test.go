@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"capstone-be/config"
+	"capstone-be/internal/testutil"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 func TestDelayedWriter(t *testing.T) {
@@ -135,30 +137,75 @@ func TestHandlerDumpFailConnection(t *testing.T) {
 	}
 }
 
+// testConfig points at the TEST_DB_DSN server (never the developer's .env DB).
+func testConfig(t *testing.T) *config.Config {
+	t.Helper()
+	db := testutil.OpenTestDB(t)
+	cfg := &config.Config{DBSSLMode: "disable"}
+	if err := db.QueryRow(`SELECT current_database()`).Scan(&cfg.DBName); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range strings.Fields(os.Getenv("TEST_DB_DSN")) {
+		k, v, _ := strings.Cut(f, "=")
+		switch k {
+		case "host":
+			cfg.DBHost = v
+		case "port":
+			cfg.DBPort = v
+		case "user":
+			cfg.DBUser = v
+		case "password":
+			cfg.DBPassword = v
+		}
+	}
+	return cfg
+}
+
 func TestHandlerDumpSuccess(t *testing.T) {
-	if err := godotenv.Load("../../../.env"); err != nil {
-		t.Skipf("cannot load .env: %v", err)
-	}
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		t.Skip("cannot load config")
-	}
+	cfg := testConfig(t)
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	handler := NewHandler(cfg)
 	r.POST("/dump", handler.Dump)
 
-	req := httptest.NewRequest("POST", "/dump?schema_only=true", nil)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	for _, q := range []string{"schema_only=true", "data_only=true&table=users", "clean=true"} {
+		req := httptest.NewRequest("POST", "/dump?"+q, nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", q, rec.Code, rec.Body.String())
+		}
+		if rec.Header().Get("Content-Type") != "application/sql" {
+			t.Fatalf("expected application/sql, got %s", rec.Header().Get("Content-Type"))
+		}
+		if !strings.Contains(rec.Header().Get("Content-Disposition"), "backup_"+cfg.DBName) {
+			t.Fatalf("bad Content-Disposition %q", rec.Header().Get("Content-Disposition"))
+		}
+		if !bytes.Contains(rec.Body.Bytes(), []byte("PostgreSQL database dump")) {
+			t.Fatalf("expected PostgreSQL database dump in output")
+		}
 	}
-	if rec.Header().Get("Content-Type") != "application/sql" {
-		t.Fatalf("expected application/sql, got %s", rec.Header().Get("Content-Type"))
+}
+
+func TestFindPgDumpFallback(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // not on PATH: only the hard-coded candidates remain
+	p, err := findPgDump()
+	if err != nil {
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("unexpected error %v", err)
+		}
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.POST("/dump", NewHandler(&config.Config{}).Dump)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest("POST", "/dump", nil))
+		if rec.Code != http.StatusInternalServerError || !bytes.Contains(rec.Body.Bytes(), []byte("database dump tool unavailable")) {
+			t.Fatalf("got %d %s", rec.Code, rec.Body.String())
+		}
+		return
 	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte("PostgreSQL database dump")) {
-		t.Fatalf("expected PostgreSQL database dump in output")
+	if !strings.HasSuffix(p, "/pg_dump") {
+		t.Fatalf("unexpected path %s", p)
 	}
 }

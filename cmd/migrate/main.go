@@ -24,42 +24,49 @@ type Migration struct {
 }
 
 func main() {
+	if err := run(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(args []string) error {
 	action := "up"
-	if len(os.Args) > 1 {
-		action = os.Args[1]
+	if len(args) > 0 {
+		action = args[0]
 	}
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		return fmt.Errorf("Failed to load configuration: %v", err)
 	}
 
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		return fmt.Errorf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
 
 	if err := createMigrationsTable(db); err != nil {
-		log.Fatalf("Failed to create migrations table: %v", err)
+		return fmt.Errorf("Failed to create migrations table: %v", err)
 	}
 
 	switch action {
 	case "up":
 		if err := runUp(db); err != nil {
-			log.Fatalf("Migration up failed: %v", err)
+			return fmt.Errorf("Migration up failed: %v", err)
 		}
 	case "down":
 		if err := runDown(db); err != nil {
-			log.Fatalf("Migration down failed: %v", err)
+			return fmt.Errorf("Migration down failed: %v", err)
 		}
 	case "status":
 		if err := runStatus(db); err != nil {
-			log.Fatalf("Migration status failed: %v", err)
+			return fmt.Errorf("Migration status failed: %v", err)
 		}
 	default:
-		log.Fatalf("Unknown action: %s. Use 'up', 'down', or 'status'", action)
+		return fmt.Errorf("Unknown action: %s. Use 'up', 'down', or 'status'", action)
 	}
+	return nil
 }
 
 func createMigrationsTable(db *sql.DB) error {

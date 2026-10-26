@@ -49,3 +49,81 @@ func TestRejectInvalidTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestNewManagerValidation(t *testing.T) {
+	good := strings.Repeat("a", 32)
+	for _, tc := range []struct {
+		name   string
+		secret string
+		hours  int
+	}{
+		{"short secret", "short", 1},
+		{"blank padded secret", strings.Repeat(" ", 40), 1},
+		{"default secret", "supersecretjwtkeychangeinproduction", 1},
+		{"zero hours", good, 0},
+		{"too many hours", good, 8761},
+	} {
+		if _, err := NewManager(tc.secret, tc.hours); err == nil {
+			t.Fatalf("%s: expected error", tc.name)
+		}
+	}
+	if _, err := NewManager(good, 8760); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewAccessManager(t *testing.T) {
+	good := strings.Repeat("a", 32)
+	for _, minutes := range []int{0, 61} {
+		if _, err := NewAccessManager(good, minutes); err == nil {
+			t.Fatalf("minutes=%d accepted", minutes)
+		}
+	}
+	if _, err := NewAccessManager("short", 15); err == nil {
+		t.Fatal("short secret accepted")
+	}
+	m, err := NewAccessManager(good, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, seconds, err := m.Issue(1, "sid")
+	if err != nil || seconds != 900 {
+		t.Fatalf("seconds=%d err=%v", seconds, err)
+	}
+	id, sid, err := m.VerifySession(raw)
+	if err != nil || id != 1 || sid != "sid" {
+		t.Fatalf("id=%d sid=%q err=%v", id, sid, err)
+	}
+}
+
+func TestIssueRejectsInvalidInput(t *testing.T) {
+	m, _ := NewManager(strings.Repeat("a", 32), 1)
+	if _, _, err := m.Issue(0, "sid"); err == nil {
+		t.Fatal("zero user accepted")
+	}
+	if _, _, err := m.Issue(1, ""); err == nil {
+		t.Fatal("empty session accepted")
+	}
+}
+
+func TestVerifyRejectsClaimGaps(t *testing.T) {
+	secret := strings.Repeat("a", 32)
+	m, _ := NewManager(secret, 1)
+	exp := jwt.NewNumericDate(time.Now().Add(time.Hour))
+	for _, tc := range []struct {
+		name   string
+		claims Claims
+	}{
+		{"missing sid", Claims{RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: "1", IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: exp}}},
+		{"missing issued at", Claims{SessionID: "s", RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: "1", ExpiresAt: exp}}},
+		{"non numeric subject", Claims{SessionID: "s", RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: "abc", IssuedAt: jwt.NewNumericDate(time.Now()), ExpiresAt: exp}}},
+	} {
+		raw, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, tc.claims).SignedString([]byte(secret))
+		if _, _, err := m.VerifySession(raw); err == nil {
+			t.Fatalf("%s: accepted", tc.name)
+		}
+	}
+	if _, err := m.Verify("not-a-jwt"); err == nil {
+		t.Fatal("garbage accepted")
+	}
+}

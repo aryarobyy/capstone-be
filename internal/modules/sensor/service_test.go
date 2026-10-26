@@ -17,6 +17,7 @@ type mockSensorRepository struct {
 	total          int
 	err            error
 	detailSensor   *Sensor
+	detailErr      error
 }
 
 func (m *mockSensorRepository) Create(ctx context.Context, req CreateSensorRequest) (int64, error) {
@@ -38,6 +39,9 @@ func (m *mockSensorRepository) List(ctx context.Context, filter SensorFilter) ([
 }
 
 func (m *mockSensorRepository) Detail(ctx context.Context, req DetailSensorRequest) (*Sensor, error) {
+	if m.detailErr != nil {
+		return nil, m.detailErr
+	}
 	if m.detailSensor != nil {
 		return m.detailSensor, m.err
 	}
@@ -297,3 +301,134 @@ func TestSensorService_OwnerID_Scoping(t *testing.T) {
 }
 
 
+
+func TestSensorService_ErrorBranches(t *testing.T) {
+	boom := errors.New("boom")
+	areaID := int64(1)
+	ctx := context.Background()
+
+	t.Run("Create area lookup error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{}, &mockAreaRepository{err: boom})
+		if _, err := svc.Create(ctx, CreateSensorRequest{AreaID: &areaID}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Create repo error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{err: boom}, &mockAreaRepository{})
+		if _, err := svc.Create(ctx, CreateSensorRequest{}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Create detail error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{detailErr: boom}, &mockAreaRepository{})
+		if _, err := svc.Create(ctx, CreateSensorRequest{}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Update area lookup error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{}, &mockAreaRepository{err: boom})
+		if _, err := svc.Update(ctx, UpdateSensorRequest{ID: 1, AreaID: &areaID}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Update repo error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{err: ErrSensorNotFound}, &mockAreaRepository{})
+		if _, err := svc.Update(ctx, UpdateSensorRequest{ID: 1}); !errors.Is(err, ErrSensorNotFound) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Update detail error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{detailErr: boom}, &mockAreaRepository{})
+		if _, err := svc.Update(ctx, UpdateSensorRequest{ID: 1}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("List repo error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{err: boom}, &mockAreaRepository{})
+		if _, err := svc.List(ctx, ListSensorRequest{}); !errors.Is(err, boom) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Detail repo error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{detailErr: ErrSensorNotFound}, &mockAreaRepository{})
+		if _, err := svc.Detail(ctx, DetailSensorRequest{ID: 1}); !errors.Is(err, ErrSensorNotFound) {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("Delete repo error", func(t *testing.T) {
+		svc := NewSensorService(&mockSensorRepository{err: ErrSensorNotFound}, &mockAreaRepository{})
+		if err := svc.Delete(ctx, DeleteSensorRequest{ID: 1}); !errors.Is(err, ErrSensorNotFound) {
+			t.Fatalf("got %v", err)
+		}
+	})
+}
+
+func TestSensorService_List_Clamping(t *testing.T) {
+	repo := &mockSensorRepository{}
+	svc := NewSensorService(repo, &mockAreaRepository{})
+	res, err := svc.List(context.Background(), ListSensorRequest{Limit: 500, Index: -3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.capturedFilter.Limit != 100 || repo.capturedFilter.Index != 0 || res.Limit != 100 || res.Index != 0 {
+		t.Fatalf("filter=%+v res=%+v", repo.capturedFilter, res)
+	}
+	if res.Data == nil {
+		t.Fatal("expected non-nil empty data slice")
+	}
+}
+
+// ownerRepo records the OwnerID seen by each repository call.
+type ownerRepo struct {
+	mockSensorRepository
+	owners []int64
+}
+
+func (o *ownerRepo) Update(ctx context.Context, req UpdateSensorRequest) error {
+	o.owners = append(o.owners, req.OwnerID)
+	return nil
+}
+func (o *ownerRepo) Delete(ctx context.Context, req DeleteSensorRequest) error {
+	o.owners = append(o.owners, req.OwnerID)
+	return nil
+}
+func (o *ownerRepo) Detail(ctx context.Context, req DetailSensorRequest) (*Sensor, error) {
+	o.owners = append(o.owners, req.OwnerID)
+	return &Sensor{ID: req.ID, OwnerID: req.OwnerID}, nil
+}
+
+func TestSensorService_OwnerFromContext_UpdateDeleteDetail(t *testing.T) {
+	repo := &ownerRepo{}
+	svc := NewSensorService(repo, &mockAreaRepository{})
+	ctx := middleware.WithUserID(context.Background(), 5)
+
+	res, err := svc.Update(ctx, UpdateSensorRequest{ID: 1})
+	if err != nil || res.OwnerID != 5 {
+		t.Fatalf("Update: %+v %v", res, err)
+	}
+	if err := svc.Delete(ctx, DeleteSensorRequest{ID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Detail(ctx, DetailSensorRequest{ID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// Explicit OwnerID wins over context.
+	if _, err := svc.Detail(ctx, DetailSensorRequest{ID: 1, OwnerID: 9}); err != nil {
+		t.Fatal(err)
+	}
+	want := []int64{5, 5, 5, 5, 9}
+	if len(repo.owners) != len(want) {
+		t.Fatalf("owners = %v, want %v", repo.owners, want)
+	}
+	for i := range want {
+		if repo.owners[i] != want[i] {
+			t.Fatalf("owners = %v, want %v", repo.owners, want)
+		}
+	}
+}
+
+func TestToSensorResponse_Nil(t *testing.T) {
+	if toSensorResponse(nil) != nil {
+		t.Fatal("expected nil")
+	}
+}

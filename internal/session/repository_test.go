@@ -2,42 +2,18 @@ package session
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	_ "github.com/lib/pq"
+	"capstone-be/internal/testutil"
 )
 
-// Use a disposable database: this test creates and drops its own schema.
 func TestSessionLifecyclePostgres(t *testing.T) {
-	dsn := os.Getenv("SESSION_TEST_DSN")
-	if dsn == "" {
-		t.Skip("SESSION_TEST_DSN not set")
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db := testutil.OpenTestDB(t)
 	db.SetMaxOpenConns(1)
 	ctx := context.Background()
-	if _, err = db.Exec(`CREATE SCHEMA session_integration; SET search_path TO session_integration`); err != nil {
-		t.Fatal(err)
-	}
-	defer db.Exec(`DROP SCHEMA session_integration CASCADE`)
-	for _, name := range []string{"000001_create_users_table.up.sql", "000008_create_notifications.up.sql", "000009_create_sessions.up.sql"} {
-		content, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = db.Exec(string(content)); err != nil {
-			t.Fatal(err)
-		}
-	}
+	var err error
 	if _, err = db.Exec(`INSERT INTO users(id,name,email,password) VALUES(1,'a','a@example.com','hash'),(2,'b','b@example.com','hash')`); err != nil {
 		t.Fatal(err)
 	}
@@ -96,10 +72,8 @@ func TestSessionLifecyclePostgres(t *testing.T) {
 	if count != 0 {
 		t.Fatal("device persisted despite failed session transaction")
 	}
-	for _, name := range []string{"000009_create_sessions.down.sql", "000008_create_notifications.down.sql", "000001_create_users_table.down.sql"} {
-		content, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
-		must(err)
-		_, err = db.Exec(string(content))
-		must(err)
-	}
+	// The original test also applied the sessions-related down migrations. With the full
+	// migration set this is not possible: 000010 depends on those tables, and the complete
+	// down chain fails (000011.down drops areas.owner_id, then 000010.down drops it again
+	// without IF EXISTS). testutil drops the whole database on cleanup instead.
 }

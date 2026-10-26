@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"capstone-be/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,6 +18,9 @@ import (
 type mockSensorReadingService struct {
 	listResponse    *ListSensorReadingResponse
 	summaryResponse *SensorSummaryResponse
+	detailResponse  *SensorReadingResponse
+	ownerID         int64
+	summaryReq      SensorSummaryRequest
 	err             error
 }
 
@@ -27,14 +33,15 @@ func (m *mockSensorReadingService) List(ctx context.Context, req ListSensorReadi
 }
 
 func (m *mockSensorReadingService) Detail(ctx context.Context, req DetailSensorReadingRequest) (*SensorReadingResponse, error) {
-	return nil, nil
+	return m.detailResponse, m.err
 }
 
 func (m *mockSensorReadingService) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
-	return nil
+	return m.err
 }
 
 func (m *mockSensorReadingService) Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error) {
+	m.ownerID, m.summaryReq = ownerID, req
 	return m.summaryResponse, m.err
 }
 
@@ -182,3 +189,93 @@ func TestSensorReadingHandler_Summary(t *testing.T) {
 	}
 }
 
+
+func serve(t *testing.T, h gin.HandlerFunc, body string, pre ...gin.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/x", append(pre, h)...)
+	req := httptest.NewRequest(http.MethodPost, "/x", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+func TestSensorReadingHandler_StatusCodes(t *testing.T) {
+	future := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	boom := errors.New("boom")
+	cases := []struct {
+		name string
+		svc  *mockSensorReadingService
+		pick func(*SensorReadingHandler) gin.HandlerFunc
+		body string
+		want int
+	}{
+		{"create bad json", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Create }, `{`, 400},
+		{"create negative sensor", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Create }, `{"sensor_id":-1,"recorded_at":"` + past + `"}`, 400},
+		{"create future", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Create }, `{"sensor_id":1,"recorded_at":"` + future + `"}`, 400},
+		{"create svc error", &mockSensorReadingService{err: boom}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Create }, `{"sensor_id":1,"recorded_at":"` + past + `"}`, 500},
+		{"create ok", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Create }, `{"sensor_id":1,"recorded_at":"` + past + `"}`, 201},
+		{"list bad json", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.List }, `{`, 400},
+		{"list svc error", &mockSensorReadingService{err: boom}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.List }, `{}`, 500},
+		{"detail bad json", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Detail }, `{}`, 400},
+		{"detail not found", &mockSensorReadingService{err: ErrSensorReadingNotFound}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Detail }, `{"id":1}`, 404},
+		{"detail svc error", &mockSensorReadingService{err: boom}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Detail }, `{"id":1}`, 500},
+		{"detail ok", &mockSensorReadingService{detailResponse: &SensorReadingResponse{ID: 1}}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Detail }, `{"id":1}`, 200},
+		{"delete bad json", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Delete }, `{}`, 400},
+		{"delete not found", &mockSensorReadingService{err: ErrSensorReadingNotFound}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Delete }, `{"id":1}`, 404},
+		{"delete svc error", &mockSensorReadingService{err: boom}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Delete }, `{"id":1}`, 500},
+		{"delete ok", &mockSensorReadingService{}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Delete }, `{"id":1}`, 200},
+		{"summary svc error", &mockSensorReadingService{err: boom}, func(h *SensorReadingHandler) gin.HandlerFunc { return h.Summary }, `{}`, 500},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := serve(t, tc.pick(NewSensorReadingHandler(tc.svc)), tc.body)
+			if w.Code != tc.want {
+				t.Fatalf("want %d, got %d: %s", tc.want, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestSensorReadingHandler_SummaryOwnerAndDefaults(t *testing.T) {
+	svc := &mockSensorReadingService{summaryResponse: &SensorSummaryResponse{}}
+	h := NewSensorReadingHandler(svc)
+
+	// Invalid body falls back to the default 10 minute window; no user -> owner 0.
+	if w := serve(t, h.Summary, `not json`); w.Code != 200 || svc.summaryReq.WindowMinutes != 10 || svc.ownerID != 0 {
+		t.Fatalf("got %d req=%+v owner=%d", w.Code, svc.summaryReq, svc.ownerID)
+	}
+	// Owner from request context.
+	fromCtx := func(c *gin.Context) { c.Request = c.Request.WithContext(middleware.WithUserID(c.Request.Context(), 7)) }
+	if serve(t, h.Summary, `{}`, fromCtx); svc.ownerID != 7 {
+		t.Fatalf("owner from ctx = %d", svc.ownerID)
+	}
+	// Owner from gin keys.
+	fromKeys := func(c *gin.Context) { c.Set(middleware.UserIDKey, int64(9)) }
+	if serve(t, h.Summary, `{}`, fromKeys); svc.ownerID != 9 {
+		t.Fatalf("owner from keys = %d", svc.ownerID)
+	}
+	// Wrong type in gin keys is ignored.
+	badKey := func(c *gin.Context) { c.Set(middleware.UserIDKey, "9") }
+	if serve(t, h.Summary, `{}`, badKey); svc.ownerID != 0 {
+		t.Fatalf("owner from bad key = %d", svc.ownerID)
+	}
+}
+
+func TestRegisterRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	RegisterRoutes(r.Group("/api"), r.Group("/device"), nil)
+	got := map[string]bool{}
+	for _, ri := range r.Routes() {
+		got[ri.Method+" "+ri.Path] = true
+	}
+	for _, p := range []string{"/device/sensor-reading/data/list", "/api/sensor-reading/create", "/api/sensor-reading/list", "/api/sensor-reading/detail", "/api/sensor-reading/delete", "/api/sensor-reading/summary"} {
+		if !got["POST "+p] {
+			t.Errorf("missing route POST %s", p)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package sensorreading
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -10,6 +11,8 @@ type mockSensorReadingRepository struct {
 	capturedFilter SensorReadingFilter
 	readings       []SensorReading
 	summaryItems   []SensorSummaryItem
+	detail         *SensorReading
+	summaryCalls   int
 	total          int
 	err            error
 }
@@ -24,14 +27,15 @@ func (m *mockSensorReadingRepository) List(ctx context.Context, filter SensorRea
 }
 
 func (m *mockSensorReadingRepository) Detail(ctx context.Context, req DetailSensorReadingRequest) (*SensorReading, error) {
-	return nil, nil
+	return m.detail, m.err
 }
 
 func (m *mockSensorReadingRepository) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
-	return nil
+	return m.err
 }
 
 func (m *mockSensorReadingRepository) CalculateSummary(ctx context.Context, sensorID int64, ownerID int64, windowMinutes int) ([]SensorSummaryItem, error) {
+	m.summaryCalls++
 	return m.summaryItems, m.err
 }
 
@@ -212,3 +216,66 @@ func TestSensorReadingService_Summary(t *testing.T) {
 	}
 }
 
+
+func TestSensorReadingService_PassThroughAndErrors(t *testing.T) {
+	ctx := context.Background()
+	boom := errors.New("boom")
+	repo := &mockSensorReadingRepository{err: boom}
+	svc := NewSensorReadingService(repo)
+
+	if err := svc.Create(ctx, CreateSensorReadingRequest{}); err != boom {
+		t.Fatalf("create err = %v", err)
+	}
+	if err := svc.Delete(ctx, DeleteSensorReadingRequest{ID: 1}); err != boom {
+		t.Fatalf("delete err = %v", err)
+	}
+	if _, err := svc.List(ctx, ListSensorReadingRequest{}); err != boom {
+		t.Fatalf("list err = %v", err)
+	}
+	if _, err := svc.Detail(ctx, DetailSensorReadingRequest{ID: 1}); err != boom {
+		t.Fatalf("detail err = %v", err)
+	}
+	if _, err := svc.Summary(ctx, SensorSummaryRequest{SensorID: 9001, WindowMinutes: 10}, 0); err != boom {
+		t.Fatalf("summary err = %v", err)
+	}
+
+	now := time.Now()
+	repo.err = nil
+	repo.detail = &SensorReading{ID: 4, SensorID: 2, SoilMoisture: 1, Temperature: 2, Humidity: 3, RecordedAt: now}
+	res, err := svc.Detail(ctx, DetailSensorReadingRequest{ID: 4})
+	if err != nil || res.ID != 4 || res.SensorID != 2 || res.Humidity != 3 || !res.RecordedAt.Equal(now) {
+		t.Fatalf("detail = %+v, %v", res, err)
+	}
+}
+
+func resetSummaryCache() {
+	GlobalSummaryCache.mu.Lock()
+	GlobalSummaryCache.items = map[int64]SensorSummaryItem{}
+	GlobalSummaryCache.mu.Unlock()
+}
+
+func TestSensorReadingService_SummaryCache(t *testing.T) {
+	resetSummaryCache()
+	ctx := context.Background()
+	repo := &mockSensorReadingRepository{summaryItems: []SensorSummaryItem{{SensorID: 9002, Status: "OPTIMAL"}}}
+	svc := NewSensorReadingService(repo)
+
+	// window <= 0 defaults to 10, misses cache, populates it.
+	res, err := svc.Summary(ctx, SensorSummaryRequest{SensorID: 9002}, 0)
+	if err != nil || res.WindowMinutes != 10 || repo.summaryCalls != 1 {
+		t.Fatalf("res=%+v err=%v calls=%d", res, err, repo.summaryCalls)
+	}
+	// Second call is served from cache.
+	res, _ = svc.Summary(ctx, SensorSummaryRequest{SensorID: 9002, WindowMinutes: 10}, 0)
+	if repo.summaryCalls != 1 || len(res.Data) != 1 || res.Data[0].SensorID != 9002 {
+		t.Fatalf("expected cache hit, calls=%d res=%+v", repo.summaryCalls, res)
+	}
+	// Non-default window always hits the repo and does not touch the cache.
+	repo.summaryItems = []SensorSummaryItem{{SensorID: 9003}}
+	if res, _ = svc.Summary(ctx, SensorSummaryRequest{SensorID: 9003, WindowMinutes: 30}, 0); repo.summaryCalls != 2 || res.WindowMinutes != 30 {
+		t.Fatalf("calls=%d res=%+v", repo.summaryCalls, res)
+	}
+	if _, ok := GlobalSummaryCache.Get(9003); ok {
+		t.Fatal("30m window must not be cached")
+	}
+}

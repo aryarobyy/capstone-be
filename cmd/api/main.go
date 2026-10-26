@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -28,25 +30,35 @@ import (
 )
 
 func main() {
+	// Signals stay captured until main returns, as with the previous signal.Notify channel.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run starts the API and blocks until ctx is cancelled, then shuts down gracefully.
+func run(ctx context.Context) error {
 	closeLogger, err := middleware.InitLogger()
 	if err != nil {
-		log.Fatalf("Failed to initialize logger: %v", err)
+		return fmt.Errorf("Failed to initialize logger: %v", err)
 	}
 	defer closeLogger()
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configurations: %v", err)
+		return fmt.Errorf("Failed to load configurations: %v", err)
 	}
 
 	tokens, err := token.NewManager(cfg.JWTSecret, cfg.JWTExpirationHours)
 	if err != nil {
-		log.Fatalf("Invalid JWT configuration: %v", err)
+		return fmt.Errorf("Invalid JWT configuration: %v", err)
 	}
 
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		return fmt.Errorf("Failed to initialize database: %v", err)
 	}
 	if db != nil {
 		defer func() {
@@ -64,11 +76,11 @@ func main() {
 
 	var worker *notification.Worker
 	if os.Getenv("FCM_ENABLED") == "true" {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		client, err := notification.NewMessaging(ctx, os.Getenv("FIREBASE_PROJECT_ID"))
+		fcmCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		client, err := notification.NewMessaging(fcmCtx, os.Getenv("FIREBASE_PROJECT_ID"))
 		cancel()
 		if err != nil {
-			log.Fatalf("Failed to initialize FCM: %v", err)
+			return fmt.Errorf("Failed to initialize FCM: %v", err)
 		}
 		worker = notification.NewWorker(db, client, sessions)
 	} else {
@@ -82,7 +94,7 @@ func main() {
 
 	r := gin.New()
 	if err := r.SetTrustedProxies(nil); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	r.Use(middleware.BodyLimit())
 	r.Use(middleware.Logger())
@@ -133,23 +145,26 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	serveErr := make(chan error, 1)
 	go func() {
 		log.Printf("Server running on port %s in %s mode\n", cfg.Port, cfg.Env)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Listen and serve error: %v", err)
+			serveErr <- fmt.Errorf("Listen and serve error: %v", err)
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+	}
 	log.Println("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return errors.New(fmt.Sprint("Server forced to shutdown:", err))
 	}
 
 	stopWorker()
@@ -159,4 +174,5 @@ func main() {
 		log.Println("worker shutdown timed out; lease will be recovered")
 	}
 	log.Println("Server exiting successfully")
+	return nil
 }

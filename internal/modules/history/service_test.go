@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -180,5 +181,57 @@ func TestHistoryServiceCreate_InvalidStatus(t *testing.T) {
 	_, err := service.Create(context.Background(), req)
 	if err != ErrInvalidAnomalyStatus {
 		t.Fatalf("expected ErrInvalidAnomalyStatus, got %v", err)
+	}
+}
+
+func TestHistoryService_ErrorsAndPassThrough(t *testing.T) {
+	ctx := context.Background()
+	boom := errors.New("boom")
+	repo := &mockHistoryRepository{err: boom}
+	svc := NewHistoryService(repo)
+
+	if _, err := svc.Create(ctx, CreateHistoryRequest{Status: AnomalyStatusWarning}); err != boom {
+		t.Errorf("create err = %v", err)
+	}
+	if _, err := svc.List(ctx, ListHistoryRequest{}); err != boom {
+		t.Errorf("list err = %v", err)
+	}
+	if _, err := svc.Newest(ctx, NewestHistoryRequest{}); err != boom {
+		t.Errorf("newest err = %v", err)
+	}
+	if _, err := svc.Detail(ctx, DetailHistoryRequest{ID: 1}); err != boom {
+		t.Errorf("detail err = %v", err)
+	}
+	if err := svc.Delete(ctx, DeleteHistoryRequest{ID: 1}); err != boom {
+		t.Errorf("delete err = %v", err)
+	}
+
+	resolved := time.Now()
+	repo.err = nil
+	repo.histories = []Anomaly{{ID: 8, SensorID: 2, Parameter: "ph", Status: AnomalyStatusNormal, ResolvedAt: &resolved}}
+	if res, err := svc.Newest(ctx, NewestHistoryRequest{SensorID: 2}); err != nil || res.ID != 8 || res.ResolvedAt != &resolved {
+		t.Errorf("newest = %+v, %v", res, err)
+	}
+	if res, err := svc.Detail(ctx, DetailHistoryRequest{ID: 8}); err != nil || res.ID != 8 || res.Parameter != "ph" {
+		t.Errorf("detail = %+v, %v", res, err)
+	}
+	if err := svc.Delete(ctx, DeleteHistoryRequest{ID: 8}); err != nil {
+		t.Errorf("delete err = %v", err)
+	}
+
+	// Limit <= 0 defaults to 10.
+	if res, _ := svc.List(ctx, ListHistoryRequest{Limit: 0, Index: 5}); res.Limit != 10 || res.Index != 5 || repo.filter.Limit != 10 {
+		t.Errorf("list defaults = %+v filter=%+v", res, repo.filter)
+	}
+}
+
+func TestAnomalyStatus_IsValid(t *testing.T) {
+	for _, s := range []AnomalyStatus{AnomalyStatusFatal, AnomalyStatusCritical, AnomalyStatusWarning, AnomalyStatusNormal} {
+		if !s.IsValid() {
+			t.Errorf("%s should be valid", s)
+		}
+	}
+	if AnomalyStatus("warning").IsValid() || AnomalyStatus("").IsValid() {
+		t.Error("lowercase/empty must be invalid")
 	}
 }
