@@ -52,7 +52,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*User, e
 	query := `
 		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
-		WHERE email = $1
+		WHERE lower(email) = lower($1)
 	`
 	var u User
 	err := r.db.QueryRowContext(ctx, query, email).Scan(
@@ -104,7 +104,7 @@ func (r *userRepository) Update(ctx context.Context, req UpdateUserRequest) erro
 	query := `
 		UPDATE users
 		SET name = COALESCE(NULLIF($1, ''), name), 
-			email = COALESCE(NULLIF($2, ''), email), 
+			email = COALESCE(NULLIF(lower(trim($2)), ''), email), 
 			msisdn = COALESCE(NULLIF($3, ''), msisdn),
 			updated_at = $4
 		WHERE id = $5

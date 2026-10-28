@@ -111,7 +111,7 @@ func run(ctx context.Context) error {
 	sensorreading.RegisterRoutes(protected, apiGroup, db)
 	history.RegisterRoutes(protected, db)
 	databaseRoutes := apiGroup.Group("/database")
-	databaseRoutes.Use(middleware.JWTAuth(tokens, sessions))
+	databaseRoutes.Use(middleware.JWTAuth(tokens, sessions), middleware.AdminOnly(db))
 	dbdump.RegisterRoutes(databaseRoutes, cfg)
 	configured := apiGroup.Group("")
 	configured.Use(middleware.JWTAuth(tokens, sessions))

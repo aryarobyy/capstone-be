@@ -51,6 +51,7 @@ func (s *historyService) List(ctx context.Context, req ListHistoryRequest) (*Lis
 	}
 
 	histories, total, err := s.repo.List(ctx, HistoryFilter{
+		OwnerID:   req.OwnerID,
 		SensorID:  req.SensorID,
 		Parameter: req.Parameter,
 		Status:    req.Status,

@@ -13,6 +13,7 @@ type CreateHistoryRequest struct {
 }
 
 type ListHistoryRequest struct {
+	OwnerID   int64  `json:"-"`
 	SensorID  int64  `json:"sensor_id"`
 	Parameter string `json:"parameter"`
 	Status    string `json:"status"`
@@ -42,19 +43,23 @@ type ListHistoryResponse struct {
 }
 
 type NewestHistoryRequest struct {
+	OwnerID   int64  `json:"-"`
 	SensorID  int64  `json:"sensor_id"`
 	Parameter string `json:"parameter"`
 }
 
 type DetailHistoryRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
+	ID      int64 `json:"id" binding:"required"`
 }
 
 type DeleteHistoryRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
+	ID      int64 `json:"id" binding:"required"`
 }
 
 type HistoryFilter struct {
+	OwnerID   int64
 	SensorID  int64
 	Parameter string
 	Status    string

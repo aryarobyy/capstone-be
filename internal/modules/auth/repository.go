@@ -32,6 +32,7 @@ func (r *authRepository) Create(ctx context.Context, u *User) error {
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
+	u.Email = strings.ToLower(strings.TrimSpace(u.Email))
 	u.CreatedAt = time.Now()
 	u.UpdatedAt = time.Now()
 
@@ -49,7 +50,7 @@ func (r *authRepository) GetByEmail(ctx context.Context, email string) (*User, e
 	query := `
 		SELECT id, name, email, COALESCE(msisdn, ''), password, created_at, updated_at
 		FROM users
-		WHERE email = $1
+		WHERE lower(email) = lower($1)
 	`
 	var u User
 	err := r.db.QueryRowContext(ctx, query, email).Scan(

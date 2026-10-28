@@ -62,6 +62,12 @@ func (r *sensorReadingRepository) List(ctx context.Context, filter SensorReading
 	var args []interface{}
 	argIdx := 1
 
+	if filter.OwnerID != 0 {
+		conditions = append(conditions, fmt.Sprintf("sensor_id IN (SELECT id FROM sensors WHERE owner_id = $%d)", argIdx))
+		args = append(args, filter.OwnerID)
+		argIdx++
+	}
+
 	if filter.SensorID != 0 {
 		conditions = append(conditions, fmt.Sprintf("sensor_id = $%d", argIdx))
 		args = append(args, filter.SensorID)
@@ -128,9 +134,10 @@ func (r *sensorReadingRepository) Detail(ctx context.Context, req DetailSensorRe
 		SELECT id, sensor_id, soil_moisture, temperature, humidity, recorded_at
 		FROM sensor_readings
 		WHERE id = $1
+			AND ($2::bigint = 0 OR sensor_id IN (SELECT id FROM sensors WHERE owner_id = $2::bigint))
 	`
 	var h SensorReading
-	err := r.db.QueryRowContext(ctx, query, req.ID).Scan(
+	err := r.db.QueryRowContext(ctx, query, req.ID, req.OwnerID).Scan(
 		&h.ID,
 		&h.SensorID,
 		&h.SoilMoisture,
@@ -151,8 +158,9 @@ func (r *sensorReadingRepository) Delete(ctx context.Context, req DeleteSensorRe
 	query := `
 		DELETE FROM sensor_readings
 		WHERE id = $1
+			AND ($2::bigint = 0 OR sensor_id IN (SELECT id FROM sensors WHERE owner_id = $2::bigint))
 	`
-	result, err := r.db.ExecContext(ctx, query, req.ID)
+	result, err := r.db.ExecContext(ctx, query, req.ID, req.OwnerID)
 	if err != nil {
 		return err
 	}
@@ -183,7 +191,7 @@ func (r *sensorReadingRepository) CalculateSummary(ctx context.Context, sensorID
 	var sensors []sensorInfo
 
 	if sensorID > 0 {
-		query := `SELECT id, name, code, COALESCE(area_id, 0), owner_id FROM sensors WHERE id = $1`
+		query := `SELECT id, name, code, COALESCE(area_id, 0), COALESCE(owner_id, 0) FROM sensors WHERE id = $1`
 		var s sensorInfo
 		err := r.db.QueryRowContext(ctx, query, sensorID).Scan(&s.id, &s.name, &s.code, &s.areaID, &s.ownerID)
 		if err != nil {
@@ -197,7 +205,7 @@ func (r *sensorReadingRepository) CalculateSummary(ctx context.Context, sensorID
 		}
 		sensors = append(sensors, s)
 	} else if ownerID > 0 {
-		query := `SELECT id, name, code, COALESCE(area_id, 0), owner_id FROM sensors WHERE owner_id = $1 ORDER BY id ASC`
+		query := `SELECT id, name, code, COALESCE(area_id, 0), COALESCE(owner_id, 0) FROM sensors WHERE owner_id = $1 ORDER BY id ASC`
 		rows, err := r.db.QueryContext(ctx, query, ownerID)
 		if err != nil {
 			return nil, err
@@ -214,7 +222,7 @@ func (r *sensorReadingRepository) CalculateSummary(ctx context.Context, sensorID
 			return nil, err
 		}
 	} else {
-		query := `SELECT id, name, code, COALESCE(area_id, 0), owner_id FROM sensors ORDER BY id ASC`
+		query := `SELECT id, name, code, COALESCE(area_id, 0), COALESCE(owner_id, 0) FROM sensors ORDER BY id ASC`
 		rows, err := r.db.QueryContext(ctx, query)
 		if err != nil {
 			return nil, err

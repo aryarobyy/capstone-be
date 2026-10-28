@@ -76,6 +76,8 @@ func TestHandlersWithoutDB(t *testing.T) {
 		{"/api/areas/create", `{"name":"` + strings.Repeat("a", 256) + `"}`, 400},
 		{"/api/areas", `{"name":"x"}`, 500},
 		{"/api/areas/list", ``, 500},
+		{"/api/areas/detail", `{"id":0}`, 400},
+		{"/api/areas/detail", `{"id":1}`, 500},
 		{"/api/areas/owner", `{"id":1,"owner_id":2}`, 503}, // AdminOnly cannot reach db
 	}
 	for _, c := range cases {
@@ -135,7 +137,7 @@ func TestRulesFlow(t *testing.T) {
 	} {
 		w := do(r, req.path, req.body)
 		var rules []Rule
-		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &rules) != nil || len(rules) != 1 {
+		if w.Code != 200 || data(w, &rules) != nil || len(rules) != 1 {
 			t.Fatalf("list %s = %d %s", req.path, w.Code, w.Body)
 		}
 		if got := rules[0]; got.Min == nil || *got.Min != -5 || *got.Max != 45 || got.Cooldown != 60 || got.MaxGap != 300 || !got.Enabled {
@@ -159,7 +161,7 @@ func TestSensorKey(t *testing.T) {
 	var out struct {
 		Key string `json:"sensor_key"`
 	}
-	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Key) != 43 {
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || data(w, &out) != nil || len(out.Key) != 43 {
 		t.Fatalf("key = %d %s", w.Code, w.Body)
 	}
 	hash := sha256.Sum256([]byte(out.Key))
@@ -176,15 +178,23 @@ func TestAreas(t *testing.T) {
 
 	var created struct{ ID int64 }
 	w := do(r, "/api/areas", `{"name":"North"}`)
-	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &created) != nil || created.ID == 0 {
+	if w.Code != 201 || data(w, &created) != nil || created.ID == 0 {
 		t.Fatalf("create = %d %s", w.Code, w.Body)
 	}
 	do(router(db, admin), "/api/areas/create", `{"name":"Admin"}`)
 
 	w = do(r, "/api/areas/list", ``)
 	var areas []Area
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &areas) != nil || len(areas) != 1 || areas[0].Name != "North" {
+	if w.Code != 200 || data(w, &areas) != nil || len(areas) != 1 || areas[0].Name != "North" {
 		t.Fatalf("list = %d %s", w.Code, w.Body)
+	}
+
+	var detail Area
+	if w := do(r, "/api/areas/detail", `{"id":`+jsonInt(created.ID)+`}`); w.Code != 200 || data(w, &detail) != nil || detail.Name != "North" {
+		t.Fatalf("detail = %d %s", w.Code, w.Body)
+	}
+	if w := do(router(db, admin), "/api/areas/detail", `{"id":`+jsonInt(created.ID)+`}`); w.Code != 404 {
+		t.Fatalf("other user's area detail = %d", w.Code)
 	}
 
 	assign := `{"id":` + jsonInt(created.ID) + `,"owner_id":` + jsonInt(admin) + `}`
@@ -204,3 +214,12 @@ func TestAreas(t *testing.T) {
 }
 
 func jsonInt(v int64) string { b, _ := json.Marshal(v); return string(b) }
+
+// data decodes the "data" field of the standard response envelope into v.
+func data(w *httptest.ResponseRecorder, v any) error {
+	var env struct{ Data json.RawMessage }
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		return err
+	}
+	return json.Unmarshal(env.Data, v)
+}

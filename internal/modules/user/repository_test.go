@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"capstone-be/internal/middleware"
 	"capstone-be/internal/testutil"
 
 	"github.com/gin-gonic/gin"
@@ -147,10 +148,17 @@ func TestRegisterRoutes(t *testing.T) {
 // TestRegisterRoutes_EndToEnd wires router -> handler -> service -> repository on a real DB.
 func TestRegisterRoutes_EndToEnd(t *testing.T) {
 	db := testutil.OpenTestDB(t)
-	testutil.Exec(t, db, `INSERT INTO users(id,name,email,password) VALUES(1,'A','a@x.io','x'),(2,'B','b@x.io','x')`)
+	testutil.Exec(t, db, `INSERT INTO users(id,name,email,password,is_admin) VALUES(1,'A','a@x.io','x',TRUE),(2,'B','b@x.io','x',FALSE)`)
 	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	RegisterRoutes(r.Group("/api"), db)
+	as := func(user int64) *gin.Engine {
+		r := gin.New()
+		RegisterRoutes(r.Group("/api", func(c *gin.Context) { c.Set(middleware.UserIDKey, user) }), db)
+		return r
+	}
+	if w := post(as(2), "/api/user/list", `{}`); w.Code != http.StatusForbidden {
+		t.Errorf("non-admin user list = %d, want 403", w.Code)
+	}
+	r := as(1)
 
 	steps := []struct {
 		path, body string

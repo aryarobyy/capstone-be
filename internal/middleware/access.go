@@ -50,8 +50,14 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 		switch parts[0] {
 		case "user":
 			allowed = req.ID == user
-		case "sensor", "sensor-reading", "history":
+		case "sensor":
 			allowed = true
+		case "sensor-reading", "history":
+			// Rows addressed by id are scoped in the repository via OwnerScope.
+			allowed = req.SensorID == 0
+			if !allowed {
+				allowed, err = ownsSensor(c, db, user, req.SensorID)
+			}
 		}
 		if err != nil {
 			c.AbortWithStatusJSON(503, gin.H{"error": "authorization unavailable"})
@@ -64,6 +70,15 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// OwnerScope is the owner_id repositories filter by; 0 means unrestricted (admin).
+func OwnerScope(c *gin.Context) int64 {
+	if c.GetBool("is_admin") {
+		return 0
+	}
+	return c.GetInt64(UserIDKey)
+}
+
 func ownsArea(c *gin.Context, db *sql.DB, user, id int64) (bool, error) {
 	var ok bool
 	err := db.QueryRowContext(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM areas WHERE id=$1 AND owner_id=$2)`, id, user).Scan(&ok)

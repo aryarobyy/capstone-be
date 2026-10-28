@@ -80,6 +80,11 @@ func (r *historyRepository) List(ctx context.Context, filter HistoryFilter) ([]A
 	args := make([]any, 0, 6)
 	argIdx := 1
 
+	if filter.OwnerID != 0 {
+		conditions = append(conditions, fmt.Sprintf("sensor_id IN (SELECT id FROM sensors WHERE owner_id = $%d)", argIdx))
+		args = append(args, filter.OwnerID)
+		argIdx++
+	}
 	if filter.SensorID != 0 {
 		conditions = append(conditions, fmt.Sprintf("sensor_id = $%d", argIdx))
 		args = append(args, filter.SensorID)
@@ -168,12 +173,13 @@ func (r *historyRepository) Newest(ctx context.Context, req NewestHistoryRequest
 		FROM anomalies
 		WHERE ($1::bigint = 0 OR sensor_id = $1::bigint)
 			AND ($2::text = '' OR parameter = $2::text)
+			AND ($3::bigint = 0 OR sensor_id IN (SELECT id FROM sensors WHERE owner_id = $3::bigint))
 		ORDER BY started_at DESC, id DESC
 		LIMIT 1
 	`
 
 	var anomaly Anomaly
-	if err := scanAnomaly(r.db.QueryRowContext(ctx, query, req.SensorID, req.Parameter), &anomaly); err != nil {
+	if err := scanAnomaly(r.db.QueryRowContext(ctx, query, req.SensorID, req.Parameter, req.OwnerID), &anomaly); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrHistoryNotFound
 		}
@@ -198,10 +204,11 @@ func (r *historyRepository) Detail(ctx context.Context, req DetailHistoryRequest
 			updated_at
 		FROM anomalies
 		WHERE id = $1
+			AND ($2::bigint = 0 OR sensor_id IN (SELECT id FROM sensors WHERE owner_id = $2::bigint))
 	`
 
 	var anomaly Anomaly
-	if err := scanAnomaly(r.db.QueryRowContext(ctx, query, req.ID), &anomaly); err != nil {
+	if err := scanAnomaly(r.db.QueryRowContext(ctx, query, req.ID, req.OwnerID), &anomaly); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrHistoryNotFound
 		}
@@ -212,7 +219,7 @@ func (r *historyRepository) Detail(ctx context.Context, req DetailHistoryRequest
 }
 
 func (r *historyRepository) Delete(ctx context.Context, req DeleteHistoryRequest) error {
-	result, err := r.db.ExecContext(ctx, "DELETE FROM anomalies WHERE id = $1", req.ID)
+	result, err := r.db.ExecContext(ctx, "DELETE FROM anomalies WHERE id = $1 AND ($2::bigint = 0 OR sensor_id IN (SELECT id FROM sensors WHERE owner_id = $2::bigint))", req.ID, req.OwnerID)
 	if err != nil {
 		return err
 	}

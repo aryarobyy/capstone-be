@@ -212,3 +212,28 @@ func TestSensorReadingRepository_CalculateSummary_NullCodeFails(t *testing.T) {
 		}
 	}
 }
+
+func TestSensorReadingRepository_OwnerScope(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	seedSensors(t, db)
+	testutil.Exec(t, db, `INSERT INTO sensors(id,name,code) VALUES (6,'s6','C6')`) // unowned sensor
+	testutil.Exec(t, db, `INSERT INTO sensor_readings(id,sensor_id,recorded_at) VALUES (10,1,NOW()),(11,3,NOW())`)
+	repo := NewSensorReadingRepository(db)
+	ctx := context.Background()
+
+	if list, total, err := repo.List(ctx, SensorReadingFilter{OwnerID: 2, Limit: 10}); err != nil || total != 1 || list[0].ID != 11 {
+		t.Fatalf("owner 2 list = %v %d %v", list, total, err)
+	}
+	if _, err := repo.Detail(ctx, DetailSensorReadingRequest{OwnerID: 2, ID: 10}); !errors.Is(err, ErrSensorReadingNotFound) {
+		t.Fatalf("detail of other owner's reading: %v", err)
+	}
+	if err := repo.Delete(ctx, DeleteSensorReadingRequest{OwnerID: 2, ID: 10}); !errors.Is(err, ErrSensorReadingNotFound) {
+		t.Fatalf("delete of other owner's reading: %v", err)
+	}
+	if _, err := repo.Detail(ctx, DetailSensorReadingRequest{ID: 10}); err != nil {
+		t.Fatalf("admin detail: %v", err)
+	}
+	if _, err := repo.CalculateSummary(ctx, 0, 0, 10); err != nil {
+		t.Fatalf("summary with unowned sensor: %v", err)
+	}
+}

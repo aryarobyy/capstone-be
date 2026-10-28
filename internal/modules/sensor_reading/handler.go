@@ -56,6 +56,7 @@ func (h *SensorReadingHandler) List(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	res, err := h.service.List(c.Request.Context(), req)
 	if err != nil {
@@ -72,6 +73,7 @@ func (h *SensorReadingHandler) Detail(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	res, err := h.service.Detail(c.Request.Context(), req)
 	if err != nil {
@@ -92,6 +94,7 @@ func (h *SensorReadingHandler) Delete(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	err := h.service.Delete(c.Request.Context(), req)
 	if err != nil {

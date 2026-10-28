@@ -11,6 +11,7 @@ type CreateSensorReadingRequest struct {
 }
 
 type ListSensorReadingRequest struct {
+	OwnerID  int64  `json:"-"`
 	SensorID int64  `json:"sensor_id"`
 	Date     string `json:"date"`
 	Limit    int    `json:"limit"`
@@ -34,14 +35,17 @@ type ListSensorReadingResponse struct {
 }
 
 type DetailSensorReadingRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
+	ID      int64 `json:"id" binding:"required"`
 }
 
 type DeleteSensorReadingRequest struct {
-	ID int64 `json:"id" binding:"required"`
+	OwnerID int64 `json:"-"`
+	ID      int64 `json:"id" binding:"required"`
 }
 
 type SensorReadingFilter struct {
+	OwnerID  int64
 	SensorID int64
 	Date     string
 	Limit    int

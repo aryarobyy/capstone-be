@@ -37,3 +37,7 @@ tmp/
 bin/
 dist/
 log/
+
+graphify-out/
+# Firebase service account
+*firebase-adminsdk*.json

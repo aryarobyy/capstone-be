@@ -85,8 +85,8 @@ func TestAuthRoutesFlow(t *testing.T) {
 	if w := call("/auth/register", `{"name":"Al","email":"al@x.io","msisdn":"0812","password":"secret1"}`, ""); w.Code != 409 {
 		t.Fatalf("duplicate register %d", w.Code)
 	}
-	if w := call("/auth/login", `{"email":"al@x.io","password":"secret1"}`, ""); w.Code != 400 {
-		t.Fatalf("login without device token %d", w.Code)
+	if w := call("/auth/login", `{"email":"AL@X.io","password":"secret1"}`, ""); w.Code != 200 || decode(w).Data.DeviceTokenRegistered {
+		t.Fatalf("case-insensitive login without device token %d %s", w.Code, w.Body)
 	}
 	if w := call("/auth/login", `{"email":"al@x.io","password":"wrong","device_token":"fcm","device_type":"web"}`, ""); w.Code != 401 {
 		t.Fatalf("bad login %d", w.Code)

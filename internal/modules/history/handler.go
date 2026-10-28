@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"capstone-be/internal/middleware"
 	responsehandler "capstone-be/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,7 @@ func (h *HistoryHandler) List(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	response, err := h.service.List(c.Request.Context(), req)
 	if err != nil {
@@ -55,6 +57,7 @@ func (h *HistoryHandler) Newest(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	response, err := h.service.Newest(c.Request.Context(), req)
 	if err != nil {
@@ -71,6 +74,7 @@ func (h *HistoryHandler) Detail(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	response, err := h.service.Detail(c.Request.Context(), req)
 	if err != nil {
@@ -87,6 +91,7 @@ func (h *HistoryHandler) Delete(c *gin.Context) {
 		responsehandler.ToValidationError(c, err)
 		return
 	}
+	req.OwnerID = middleware.OwnerScope(c)
 
 	if err := h.service.Delete(c.Request.Context(), req); err != nil {
 		handleHistoryError(c, err, "Failed to delete history")

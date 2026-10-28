@@ -72,6 +72,25 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (h *AuthHandler) DeviceToken(c *gin.Context) {
+	var req DeviceTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		responsehandler.ToValidationError(c, err)
+		return
+	}
+	err := h.service.UpdateDevice(c.Request.Context(), c.GetString(middleware.SessionIDKey), c.MustGet(middleware.UserIDKey).(int64), req)
+	if errors.Is(err, session.ErrInactive) {
+		responsehandler.ToErrorHandler(c, http.StatusUnauthorized, "Session is no longer active", nil)
+		return
+	}
+	if err != nil {
+		responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to update device token", err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	responsehandler.ToSuccessHandler[any](c, http.StatusOK, "Device token updated", nil)
+}
+
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req RefreshRequest
 	if c.ShouldBindJSON(&req) != nil {

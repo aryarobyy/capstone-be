@@ -24,5 +24,6 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB, tokens *token.Manager, 
 		authGroup.POST("/refresh", handler.Refresh)
 		authGroup.POST("/logout-refresh", handler.LogoutRefresh)
 		authGroup.POST("/logout", middleware.JWTAuth(tokens, sessions), handler.Logout)
+		authGroup.POST("/device-token", middleware.JWTAuth(tokens, sessions), handler.DeviceToken)
 	}
 }

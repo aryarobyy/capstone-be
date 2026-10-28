@@ -127,3 +127,35 @@ func TestHistoryRepository_CRUD(t *testing.T) {
 		t.Fatalf("expected 2 rows left, got %d", n)
 	}
 }
+
+func TestHistoryRepository_OwnerScope(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	testutil.Exec(t, db, `INSERT INTO users(id,name,email,password) VALUES (1,'a','a@x.io','x'),(2,'b','b@x.io','x')`)
+	testutil.Exec(t, db, `INSERT INTO sensors(id,name,code,owner_id) VALUES (1,'s1','C1',1),(2,'s2','C2',2)`)
+	repo := NewHistoryRepository(db)
+	ctx := context.Background()
+	now := time.Now()
+	a, err := repo.Create(ctx, CreateHistoryRequest{SensorID: 1, Parameter: "ph", StartedAt: now, LastDetectedAt: now, Status: AnomalyStatusWarning})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.Create(ctx, CreateHistoryRequest{SensorID: 2, Parameter: "ph", StartedAt: now, LastDetectedAt: now, Status: AnomalyStatusWarning}); err != nil {
+		t.Fatal(err)
+	}
+
+	if list, total, err := repo.List(ctx, HistoryFilter{OwnerID: 1, Limit: 10}); err != nil || total != 1 || list[0].ID != a.ID {
+		t.Fatalf("owner 1 list = %v %d %v", list, total, err)
+	}
+	if n, err := repo.Newest(ctx, NewestHistoryRequest{OwnerID: 1}); err != nil || n.ID != a.ID {
+		t.Fatalf("owner 1 newest = %v %v", n, err)
+	}
+	if _, err := repo.Detail(ctx, DetailHistoryRequest{OwnerID: 2, ID: a.ID}); !errors.Is(err, ErrHistoryNotFound) {
+		t.Fatalf("detail of other owner's anomaly: %v", err)
+	}
+	if err := repo.Delete(ctx, DeleteHistoryRequest{OwnerID: 2, ID: a.ID}); !errors.Is(err, ErrHistoryNotFound) {
+		t.Fatalf("delete of other owner's anomaly: %v", err)
+	}
+	if err := repo.Delete(ctx, DeleteHistoryRequest{OwnerID: 1, ID: a.ID}); err != nil {
+		t.Fatalf("owner delete: %v", err)
+	}
+}

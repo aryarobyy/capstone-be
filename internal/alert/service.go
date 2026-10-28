@@ -129,6 +129,15 @@ func (s *Service) Areas(ctx context.Context, user int64) ([]Area, error) {
 	return out, rows.Err()
 }
 
+func (s *Service) AreaDetail(ctx context.Context, user, id int64) (*Area, error) {
+	a := &Area{}
+	err := s.db.QueryRowContext(ctx, `SELECT id,name FROM areas WHERE id = $1 AND owner_id = $2`, id, user).Scan(&a.ID, &a.Name)
+	if err == sql.ErrNoRows {
+		return nil, ErrAreaNotFound
+	}
+	return a, err
+}
+
 func (s *Service) UpdateArea(ctx context.Context, user, id int64, name string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE areas SET name = $1, updated_at = NOW() WHERE id = $2 AND owner_id = $3`, name, id, user)
 	if err != nil {

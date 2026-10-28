@@ -187,16 +187,28 @@ func TestResourceAccess_ListEndpoints(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	t.Run("sensor-reading create is allowed", func(t *testing.T) {
-		body := bytes.NewBufferString(`{"sensor_id": 1, "soil_moisture": 50, "temperature": 25, "humidity": 60, "recorded_at": "2026-09-19T13:00:00Z"}`)
-		req := httptest.NewRequest(http.MethodPost, "/api/sensor-reading/create", body)
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
+	t.Run("sensor-reading create requires owning the sensor", func(t *testing.T) {
+		for _, owns := range []bool{false, true} {
+			mockState.Lock()
+			mockState.owns = owns
+			mockState.Unlock()
+			body := bytes.NewBufferString(`{"sensor_id": 1, "soil_moisture": 50, "temperature": 25, "humidity": 60, "recorded_at": "2026-09-19T13:00:00Z"}`)
+			req := httptest.NewRequest(http.MethodPost, "/api/sensor-reading/create", body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
 
-		if w.Code != http.StatusCreated {
-			t.Fatalf("expected status 201, got %d with body %s", w.Code, w.Body.String())
+			want := http.StatusForbidden
+			if owns {
+				want = http.StatusCreated
+			}
+			if w.Code != want {
+				t.Fatalf("owns=%v: expected status %d, got %d with body %s", owns, want, w.Code, w.Body.String())
+			}
 		}
+		mockState.Lock()
+		mockState.owns = false
+		mockState.Unlock()
 	})
 
 	t.Run("sensor detail is allowed without owner_id check", func(t *testing.T) {

@@ -41,6 +41,9 @@ func (f *fakeService) Refresh(context.Context, string) (*RefreshResponse, error)
 	return &RefreshResponse{AccessToken: "a"}, nil
 }
 func (f *fakeService) LogoutRefresh(context.Context, string) error { return f.err }
+func (f *fakeService) UpdateDevice(context.Context, string, int64, DeviceTokenRequest) error {
+	return f.err
+}
 
 func serve(svc AuthService, method, path, body string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
@@ -54,6 +57,10 @@ func serve(svc AuthService, method, path, body string) *httptest.ResponseRecorde
 		c.Set(middleware.SessionIDKey, "sid")
 		c.Set(middleware.UserIDKey, int64(3))
 	}, h.Logout)
+	r.POST("/device-token", func(c *gin.Context) {
+		c.Set(middleware.SessionIDKey, "sid")
+		c.Set(middleware.UserIDKey, int64(3))
+	}, h.DeviceToken)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -79,7 +86,7 @@ func TestHandlers(t *testing.T) {
 		{"login ok", "/login", login, nil, 200},
 		{"login invalid", "/login", `{}`, nil, 400},
 		{"login device mismatch", "/login", `{"email":"a@x.io","password":"p","device_token":"t"}`, nil, 400},
-		{"login without device", "/login", `{"email":"a@x.io","password":"secret1"}`, nil, 400},
+		{"login without device", "/login", `{"email":"a@x.io","password":"secret1"}`, nil, 200},
 		{"login bad device", "/login", login, ErrInvalidDevice, 400},
 		{"login bad credentials", "/login", login, ErrInvalidCredentials, 401},
 		{"login failure", "/login", login, errDB, 500},
@@ -92,6 +99,10 @@ func TestHandlers(t *testing.T) {
 		{"logout-refresh failure", "/logout-refresh", refresh, errDB, 503},
 		{"logout ok", "/logout", "", nil, 204},
 		{"logout failure", "/logout", "", errDB, 500},
+		{"device-token ok", "/device-token", `{"device_token":"t","device_type":"ios"}`, nil, 200},
+		{"device-token invalid", "/device-token", `{"device_token":"t","device_type":"pc"}`, nil, 400},
+		{"device-token inactive", "/device-token", `{"device_token":"t","device_type":"ios"}`, session.ErrInactive, 401},
+		{"device-token failure", "/device-token", `{"device_token":"t","device_type":"ios"}`, errDB, 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := serve(&fakeService{err: tc.err}, http.MethodPost, tc.path, tc.body)

@@ -39,6 +39,7 @@ func (s *sensorReadingService) List(ctx context.Context, req ListSensorReadingRe
 	}
 
 	filter := SensorReadingFilter{
+		OwnerID:  req.OwnerID,
 		SensorID: req.SensorID,
 		Date:     req.Date,
 		Limit:    limit,

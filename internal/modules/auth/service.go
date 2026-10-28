@@ -24,6 +24,7 @@ type AuthService interface {
 	Logout(context.Context, string, int64) error
 	Refresh(context.Context, string) (*RefreshResponse, error)
 	LogoutRefresh(context.Context, string) error
+	UpdateDevice(ctx context.Context, sid string, user int64, req DeviceTokenRequest) error
 }
 
 type authService struct {
@@ -116,6 +117,11 @@ func (s *authService) Login(ctx context.Context, req LoginRequest) (*LoginRespon
 
 func (s *authService) Logout(ctx context.Context, sid string, user int64) error {
 	return s.sessions.Revoke(ctx, sid, user)
+}
+
+// UpdateDevice replaces the push token of the current session, e.g. after FCM onTokenRefresh.
+func (s *authService) UpdateDevice(ctx context.Context, sid string, user int64, req DeviceTokenRequest) error {
+	return s.sessions.BindDevice(ctx, sid, user, req.DeviceToken, req.DeviceType)
 }
 
 func (s *authService) Refresh(ctx context.Context, raw string) (*RefreshResponse, error) {
