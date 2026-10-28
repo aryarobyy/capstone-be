@@ -85,7 +85,10 @@ func TestAuthRoutesFlow(t *testing.T) {
 	if w := call("/auth/register", `{"name":"Al","email":"al@x.io","msisdn":"0812","password":"secret1"}`, ""); w.Code != 409 {
 		t.Fatalf("duplicate register %d", w.Code)
 	}
-	if w := call("/auth/login", `{"email":"al@x.io","password":"wrong"}`, ""); w.Code != 401 {
+	if w := call("/auth/login", `{"email":"al@x.io","password":"secret1"}`, ""); w.Code != 400 {
+		t.Fatalf("login without device token %d", w.Code)
+	}
+	if w := call("/auth/login", `{"email":"al@x.io","password":"wrong","device_token":"fcm","device_type":"web"}`, ""); w.Code != 401 {
 		t.Fatalf("bad login %d", w.Code)
 	}
 	w := call("/auth/login", `{"email":"al@x.io","password":"secret1","device_token":"fcm","device_type":"web"}`, "")
@@ -112,7 +115,7 @@ func TestAuthRoutesFlow(t *testing.T) {
 		t.Fatalf("logout after revoke %d", w.Code)
 	}
 
-	second := decode(call("/auth/login", `{"email":"al@x.io","password":"secret1"}`, ""))
+	second := decode(call("/auth/login", `{"email":"al@x.io","password":"secret1","device_token":"fcm","device_type":"web"}`, ""))
 	if w := call("/auth/logout-refresh", `{"refresh_token":"`+second.Data.RefreshToken+`"}`, ""); w.Code != 204 {
 		t.Fatalf("logout-refresh %d", w.Code)
 	}

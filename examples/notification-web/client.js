@@ -22,10 +22,12 @@ export async function loginWithNotifications({ firebaseConfig, vapidKey, apiBase
     // FCM setup errors must not prevent login; expose the error to the UI.
     notificationError = error.message;
   }
+  // The API requires device_token on login.
+  if (!deviceToken) throw new Error(notificationError || 'Notification permission is required to log in');
   const response = await fetch(`${apiBase}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, ...(deviceToken ? { device_token: deviceToken, device_type: 'web' } : {}) }),
+    body: JSON.stringify({ email, password, device_token: deviceToken, device_type: 'web' }),
   });
   const body = await response.json();
   if (!response.ok) throw new Error(body.message || `Login failed: ${response.status}`);

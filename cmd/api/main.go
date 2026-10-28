@@ -72,7 +72,6 @@ func run(ctx context.Context) error {
 	sessions := session.NewRepository(db)
 	notificationRepo := notification.NewRepository(db)
 	notificationService := notification.NewService(notificationRepo)
-	_ = notificationService
 
 	var worker *notification.Worker
 	if os.Getenv("FCM_ENABLED") == "true" {
@@ -117,6 +116,7 @@ func run(ctx context.Context) error {
 	configured := apiGroup.Group("")
 	configured.Use(middleware.JWTAuth(tokens, sessions))
 	alert.RegisterRoutes(configured, db)
+	notification.RegisterRoutes(configured, notificationService)
 	ingest := sensorreading.NewSensorReadingHandler(sensorreading.NewSensorReadingService(sensorreading.NewSensorReadingRepository(db)))
 	apiGroup.POST("/ingest/sensor-reading", middleware.RateLimit(600, time.Minute), middleware.SensorKey(db), ingest.Create)
 	workerCtx, stopWorker := context.WithCancel(context.Background())

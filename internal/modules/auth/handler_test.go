@@ -64,7 +64,7 @@ func serve(svc AuthService, method, path, body string) *httptest.ResponseRecorde
 func TestHandlers(t *testing.T) {
 	const (
 		reg     = `{"name":"Al","email":"a@x.io","msisdn":"0812","password":"secret1"}`
-		login   = `{"email":"a@x.io","password":"secret1"}`
+		login   = `{"email":"a@x.io","password":"secret1","device_token":"t","device_type":"android"}`
 		refresh = `{"refresh_token":"0123456789012345678901234567890123456789012"}`
 	)
 	for _, tc := range []struct {
@@ -79,6 +79,7 @@ func TestHandlers(t *testing.T) {
 		{"login ok", "/login", login, nil, 200},
 		{"login invalid", "/login", `{}`, nil, 400},
 		{"login device mismatch", "/login", `{"email":"a@x.io","password":"p","device_token":"t"}`, nil, 400},
+		{"login without device", "/login", `{"email":"a@x.io","password":"secret1"}`, nil, 400},
 		{"login bad device", "/login", login, ErrInvalidDevice, 400},
 		{"login bad credentials", "/login", login, ErrInvalidCredentials, 401},
 		{"login failure", "/login", login, errDB, 500},

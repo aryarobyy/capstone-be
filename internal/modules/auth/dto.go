@@ -11,8 +11,8 @@ type RegisterRequest struct {
 
 type LoginRequest struct {
 	InstallationID string `json:"installation_id" binding:"omitempty,uuid"`
-	DeviceToken    string `json:"device_token" binding:"required_with=DeviceType,omitempty,max=4096"`
-	DeviceType     string `json:"device_type" binding:"required_with=DeviceToken,omitempty,oneof=android ios web"`
+	DeviceToken    string `json:"device_token" binding:"required,max=4096"`
+	DeviceType     string `json:"device_type" binding:"required,oneof=android ios web"`
 	Email          string `json:"email" binding:"required,email"`
 	Password       string `json:"password" binding:"required"`
 }
