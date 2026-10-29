@@ -154,11 +154,6 @@ func TestToPaginatedSuccessHandler(t *testing.T) {
 }
 
 func TestToPaginatedSuccessHandlerZeroLimit(t *testing.T) {
-	defer func() {
-		if r := recover(); r != nil {
-			t.Skipf("BUG: ToPaginatedSuccessHandler panics (%v) when limit == 0: the limit<=0 guard runs after int(totalData)/limit", r)
-		}
-	}()
 	c, w := ctx()
 	ToPaginatedSuccessHandler(c, 200, "list", []int{}, 1, 0, 5)
 	if p := decode(t, w)["pagination"].(map[string]any); p["total_page"] != float64(1) {

@@ -226,12 +226,12 @@ func ToValidationError(c *gin.Context, err error) {
 }
 
 func ToPaginatedSuccessHandler[T any](c *gin.Context, statusCode int, message string, model T, page, limit int, totalData int64) {
-	totalPage := int(totalData) / limit
-	if limit > 0 && int(totalData)%limit != 0 {
-		totalPage++
-	}
-	if limit <= 0 {
-		totalPage = 1
+	totalPage := 1
+	if limit > 0 {
+		totalPage = int(totalData) / limit
+		if int(totalData)%limit != 0 {
+			totalPage++
+		}
 	}
 
 	c.JSON(statusCode, PaginatedResponse[T]{
