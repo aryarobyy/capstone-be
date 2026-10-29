@@ -13,7 +13,7 @@ func RegisterRoutes(router *gin.RouterGroup, db *sql.DB) {
 	handler := NewUserHandler(service)
 	userGroup := router.Group("/user")
 	{
-		userGroup.POST("/list", middleware.AdminOnly(db), handler.List)
+		userGroup.POST("/list", middleware.Unavailable(), handler.List)
 		userGroup.POST("/detail", handler.Detail)
 		userGroup.POST("/update", handler.Update)
 		userGroup.POST("/delete", handler.Delete)

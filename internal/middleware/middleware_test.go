@@ -288,23 +288,12 @@ func TestJWTAuthRejectsNonUUIDSession(t *testing.T) {
 	}
 }
 
-func TestAdminOnly(t *testing.T) {
+func TestUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := getTestDB(t)
-	defer db.Close()
-	for _, tc := range []struct {
-		db    *sql.DB
-		admin bool
-		want  int
-	}{{db, true, 200}, {db, false, 403}, {closedDB(t), true, 503}} {
-		mockState.Lock()
-		mockState.isAdmin = tc.admin
-		mockState.Unlock()
-		r := gin.New()
-		r.GET("/", asUser(1), AdminOnly(tc.db), ok)
-		if w := serve(r, "GET", "/", "", nil); w.Code != tc.want {
-			t.Errorf("admin=%v: got %d want %d", tc.admin, w.Code, tc.want)
-		}
+	r := gin.New()
+	r.GET("/", asUser(1), Unavailable(), ok)
+	if w := serve(r, "GET", "/", "", nil); w.Code != 403 {
+		t.Fatalf("got %d, want 403", w.Code)
 	}
 }
 
@@ -312,8 +301,6 @@ func TestResourceAccessBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := getTestDB(t)
 	defer db.Close()
-	t.Cleanup(func() { mockState.Lock(); mockState.isAdmin = false; mockState.Unlock() })
-	setAdmin := func(v bool) { mockState.Lock(); mockState.isAdmin = v; mockState.Unlock() }
 	router := func(db *sql.DB) *gin.Engine {
 		r := gin.New()
 		r.Use(asUser(42), ResourceAccess(db))
@@ -324,16 +311,6 @@ func TestResourceAccessBranches(t *testing.T) {
 		return r
 	}
 
-	if w := serve(router(closedDB(t)), "POST", "/api/user/detail", `{}`, nil); w.Code != 503 {
-		t.Fatalf("db error: %d", w.Code)
-	}
-
-	setAdmin(true)
-	if w := serve(router(db), "POST", "/api/anything/at/all", `not json`, nil); w.Code != 200 || !strings.HasPrefix(w.Body.String(), "true|") {
-		t.Fatalf("admin bypass: %d %s", w.Code, w.Body.String())
-	}
-
-	setAdmin(false)
 	r := router(db)
 	for _, tc := range []struct {
 		path, body string

@@ -15,16 +15,6 @@ import (
 func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := c.MustGet(UserIDKey).(int64)
-		var admin bool
-		if err := db.QueryRowContext(c.Request.Context(), `SELECT is_admin FROM users WHERE id=$1`, user).Scan(&admin); err != nil {
-			c.AbortWithStatusJSON(503, gin.H{"error": "authorization unavailable"})
-			return
-		}
-		c.Set("is_admin", admin)
-		if admin {
-			c.Next()
-			return
-		}
 		path := strings.TrimPrefix(c.Request.URL.Path, "/api/")
 		parts := strings.Split(path, "/")
 		if len(parts) != 2 {
@@ -71,11 +61,8 @@ func ResourceAccess(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
-// OwnerScope is the owner_id repositories filter by; 0 means unrestricted (admin).
+// OwnerScope restricts repository queries to the authenticated user.
 func OwnerScope(c *gin.Context) int64 {
-	if c.GetBool("is_admin") {
-		return 0
-	}
 	return c.GetInt64(UserIDKey)
 }
 
@@ -90,19 +77,10 @@ func ownsSensor(c *gin.Context, db *sql.DB, user, id int64) (bool, error) {
 	return ok, err
 }
 
-func AdminOnly(db *sql.DB) gin.HandlerFunc {
+// Unavailable prevents formerly privileged operations from becoming public.
+func Unavailable() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var ok bool
-		err := db.QueryRowContext(c.Request.Context(), `SELECT is_admin FROM users WHERE id=$1`, c.MustGet(UserIDKey)).Scan(&ok)
-		if err != nil {
-			c.AbortWithStatus(503)
-			return
-		}
-		if !ok {
-			c.AbortWithStatus(403)
-			return
-		}
-		c.Next()
+		c.AbortWithStatus(http.StatusForbidden)
 	}
 }
 

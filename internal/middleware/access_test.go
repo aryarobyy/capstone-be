@@ -247,3 +247,27 @@ func TestResourceAccess_ListEndpoints(t *testing.T) {
 		}
 	})
 }
+
+func TestResourceAccessDoesNotBypassOwnerForAdminFlag(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := getTestDB(t)
+	defer db.Close()
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set(UserIDKey, int64(42))
+		c.Set("is_admin", true)
+		c.Next()
+	}, ResourceAccess(db))
+	r.POST("/api/user/detail", func(c *gin.Context) { c.Status(http.StatusOK) })
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/user/detail", bytes.NewBufferString(`{"id":99}`)))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("other user detail = %d, want 403", w.Code)
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(UserIDKey, int64(42))
+	c.Set("is_admin", true)
+	if got := OwnerScope(c); got != 42 {
+		t.Fatalf("owner scope = %d, want 42", got)
+	}
+}

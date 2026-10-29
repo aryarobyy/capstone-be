@@ -78,7 +78,7 @@ func TestHandlersWithoutDB(t *testing.T) {
 		{"/api/areas/list", ``, 500},
 		{"/api/areas/detail", `{"id":0}`, 400},
 		{"/api/areas/detail", `{"id":1}`, 500},
-		{"/api/areas/owner", `{"id":1,"owner_id":2}`, 503}, // AdminOnly cannot reach db
+		{"/api/areas/owner", `{"id":1,"owner_id":2}`, 403},
 	}
 	for _, c := range cases {
 		if w := do(r, c.path, c.body); w.Code != c.want {
@@ -197,20 +197,10 @@ func TestAreas(t *testing.T) {
 		t.Fatalf("other user's area detail = %d", w.Code)
 	}
 
-	assign := `{"id":` + jsonInt(created.ID) + `,"owner_id":` + jsonInt(admin) + `}`
-	if w := do(r, "/api/areas/owner", assign); w.Code != 403 {
-		t.Fatalf("non-admin assign = %d", w.Code)
+	if w := do(r, "/api/areas/owner", `{"id":1,"owner_id":2}`); w.Code != 403 {
+		t.Fatalf("area owner reassignment = %d", w.Code)
 	}
-	ar := router(db, admin)
-	if w := do(ar, "/api/areas/owner", `{"id":0}`); w.Code != 400 {
-		t.Fatalf("bad assign = %d", w.Code)
-	}
-	if w := do(ar, "/api/areas/owner", assign); w.Code != 204 {
-		t.Fatalf("admin assign = %d", w.Code)
-	}
-	if n := testutil.Count(t, db, `SELECT count(*) FROM areas WHERE owner_id=$1`, admin); n != 2 {
-		t.Fatalf("admin areas = %d", n)
-	}
+
 }
 
 func jsonInt(v int64) string { b, _ := json.Marshal(v); return string(b) }

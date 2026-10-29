@@ -164,7 +164,7 @@ func TestRegisterRoutes_EndToEnd(t *testing.T) {
 		path, body string
 		want       int
 	}{
-		{"/api/user/list", `{}`, http.StatusOK},
+		{"/api/user/list", `{}`, http.StatusForbidden},
 		{"/api/user/detail", `{"id":1}`, http.StatusOK},
 		{"/api/user/detail", `{"id":99}`, http.StatusNotFound},
 		{"/api/user/update", `{"id":1,"email":"b@x.io"}`, http.StatusConflict},
