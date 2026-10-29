@@ -91,8 +91,9 @@ func TestBodyLimit(t *testing.T) {
 
 func TestRateLimit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	now := time.Unix(0, 0)
 	r := gin.New()
-	r.Use(RateLimit(2, 50*time.Millisecond))
+	r.Use(rateLimit(2, 50*time.Millisecond, func() time.Time { return now }))
 	r.GET("/x", ok)
 	for i, want := range []int{200, 200, 429} {
 		if w := serve(r, "GET", "/x", "", nil); w.Code != want {
@@ -101,7 +102,7 @@ func TestRateLimit(t *testing.T) {
 			t.Fatal("missing Retry-After")
 		}
 	}
-	time.Sleep(60 * time.Millisecond)
+	now = now.Add(50 * time.Millisecond)
 	if w := serve(r, "GET", "/x", "", nil); w.Code != 200 {
 		t.Fatalf("after window: %d", w.Code)
 	}
@@ -109,8 +110,9 @@ func TestRateLimit(t *testing.T) {
 
 func TestRateLimitTableFullAndEviction(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	now := time.Unix(0, 0)
 	r := gin.New()
-	r.Use(RateLimit(1, 200*time.Millisecond))
+	r.Use(rateLimit(1, 200*time.Millisecond, func() time.Time { return now }))
 	r.GET("/x", ok)
 	hit := func(i int) int {
 		req := httptest.NewRequest("GET", "/x", nil)
@@ -127,7 +129,7 @@ func TestRateLimitTableFullAndEviction(t *testing.T) {
 	if code := hit(10000); code != 429 { // table full, nothing expired yet
 		t.Fatalf("full table: %d", code)
 	}
-	time.Sleep(250 * time.Millisecond)
+	now = now.Add(200 * time.Millisecond)
 	if code := hit(10001); code != 200 { // expired entries evicted
 		t.Fatalf("after eviction: %d", code)
 	}

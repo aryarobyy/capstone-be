@@ -9,6 +9,10 @@ import (
 )
 
 func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
+	return rateLimit(limit, window, time.Now)
+}
+
+func rateLimit(limit int, window time.Duration, clock func() time.Time) gin.HandlerFunc {
 	type bucket struct {
 		count int
 		until time.Time
@@ -17,7 +21,7 @@ func RateLimit(limit int, window time.Duration) gin.HandlerFunc {
 	var mu sync.Mutex
 	return func(c *gin.Context) {
 		key := c.ClientIP()
-		now := time.Now()
+		now := clock()
 		mu.Lock()
 		b := entries[key]
 		if !now.Before(b.until) {
