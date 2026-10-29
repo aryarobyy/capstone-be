@@ -115,7 +115,7 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, area_id, COALESCE(owner_id, 0), name, code, COALESCE(description, ''), created_at, updated_at
+		SELECT id, area_id, COALESCE(owner_id, 0), name, COALESCE(code, ''), COALESCE(description, ''), created_at, updated_at
 		FROM sensors
 		%s
 		ORDER BY id DESC
@@ -142,7 +142,7 @@ func (r *sensoriRepository) List(ctx context.Context, filter SensorFilter) ([]Se
 }
 
 func (r *sensoriRepository) Detail(ctx context.Context, req DetailSensorRequest) (*Sensor, error) {
-	query := `SELECT id, area_id, COALESCE(owner_id, 0), name, code, COALESCE(description, ''), created_at, updated_at FROM sensors WHERE id = $1`
+	query := `SELECT id, area_id, COALESCE(owner_id, 0), name, COALESCE(code, ''), COALESCE(description, ''), created_at, updated_at FROM sensors WHERE id = $1`
 	args := []any{req.ID}
 	if req.OwnerID > 0 {
 		query += ` AND owner_id = $2`

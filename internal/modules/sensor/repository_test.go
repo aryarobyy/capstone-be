@@ -232,3 +232,34 @@ func TestRegisterRoutes_EndToEnd(t *testing.T) {
 		t.Fatal("expected one sensor owned by user 3")
 	}
 }
+
+// Legacy sensors may have no code or description in the deployed database.
+func TestSensorRepository_NullCode(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	testutil.Exec(t, db, `INSERT INTO users(id,name,email,password) VALUES(3,'owner','null-code@x.io','x')`)
+	testutil.Exec(t, db, `INSERT INTO sensors(id,area_id,owner_id,name,code,description) VALUES(8,5,3,'Sensor Cuaca',NULL,NULL),(9,5,3,'Sensor Tanah',NULL,NULL),(10,5,3,'Sensor Kelembapan',NULL,'uhuy')`)
+	repo := NewSensorRepository(db)
+	ctx := context.Background()
+	items, total, err := repo.List(ctx, SensorFilter{OwnerID: 3, AreaID: 5, Limit: 10})
+	if err != nil {
+		t.Fatalf("list sensors with NULL code: %v", err)
+	}
+	if total != 3 || len(items) != 3 {
+		t.Fatalf("list: total=%d items=%d", total, len(items))
+	}
+	for _, item := range items {
+		if item.Code != "" {
+			t.Fatalf("sensor %d code=%q", item.ID, item.Code)
+		}
+		detail, err := repo.Detail(ctx, DetailSensorRequest{ID: item.ID, OwnerID: 3})
+		if err != nil {
+			t.Fatalf("detail %d: %v", item.ID, err)
+		}
+		if detail.Code != "" || detail.Description != item.Description {
+			t.Fatalf("detail differs from list: %+v", detail)
+		}
+	}
+	if _, err := repo.Detail(ctx, DetailSensorRequest{ID: 8, OwnerID: 99}); !errors.Is(err, ErrSensorNotFound) {
+		t.Fatalf("other owner detail: %v", err)
+	}
+}
