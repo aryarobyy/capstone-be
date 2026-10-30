@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,9 @@ type mockSensorReadingService struct {
 	detailResponse  *SensorReadingResponse
 	ownerID         int64
 	summaryReq      SensorSummaryRequest
+	streamReq       StreamSensorReadingRequest
+	streamRows      []SensorActivity
+	onSince         func()
 	err             error
 }
 
@@ -43,6 +47,41 @@ func (m *mockSensorReadingService) Delete(ctx context.Context, req DeleteSensorR
 func (m *mockSensorReadingService) Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error) {
 	m.ownerID, m.summaryReq = ownerID, req
 	return m.summaryResponse, m.err
+}
+
+func (m *mockSensorReadingService) Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error) {
+	m.streamReq = req
+	if m.onSince != nil {
+		m.onSince()
+	}
+	if afterID > 0 {
+		return nil, m.err
+	}
+	return m.streamRows, m.err
+}
+
+func TestSensorReadingHandler_Stream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, cancel := context.WithCancel(context.Background())
+	mockSvc := &mockSensorReadingService{
+		streamRows: []SensorActivity{{ID: 7, SensorID: 3, SensorName: "Sensor Tanah", SoilMoisture: 2500}},
+		onSince:    cancel, // client leaves after the first batch
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set(middleware.UserIDKey, int64(42)); c.Next() })
+	r.POST("/stream", NewSensorReadingHandler(mockSvc).Stream)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/stream", strings.NewReader(`{"area_id":5}`)).WithContext(ctx)
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") || !strings.Contains(body, "event:reading") || !strings.Contains(body, `"sensor_name":"Sensor Tanah"`) {
+		t.Fatalf("headers=%v body=%q", w.Header(), body)
+	}
+	if mockSvc.streamReq.AreaID != 5 || mockSvc.streamReq.OwnerID != 42 {
+		t.Fatalf("req = %+v", mockSvc.streamReq)
+	}
 }
 
 func TestSensorReadingHandler_List(t *testing.T) {
@@ -188,7 +227,6 @@ func TestSensorReadingHandler_Summary(t *testing.T) {
 		t.Errorf("expected status OPTIMAL, got %s", resp.Data.Data[0].Status)
 	}
 }
-
 
 func serve(t *testing.T, h gin.HandlerFunc, body string, pre ...gin.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()

@@ -50,9 +50,6 @@ func (s *Service) SaveRule(ctx context.Context, user int64, r Rule) error {
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE anomalies SET status='NORMAL',resolved_at=NOW(),updated_at=NOW() WHERE id IN(SELECT anomaly_id FROM alert_states WHERE sensor_id=$1 AND parameter=$2)`, r.SensorID, r.Parameter); err != nil {
-		return err
-	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM alert_states WHERE sensor_id=$1 AND parameter=$2`, r.SensorID, r.Parameter); err != nil {
 		return err
 	}

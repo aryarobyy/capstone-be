@@ -119,13 +119,13 @@ func TestRulesFlow(t *testing.T) {
 		t.Fatalf("save = %d %s", w.Code, w.Body)
 	}
 
-	// Open an anomaly, then re-saving the rule resolves it and clears state.
+	// Record an anomaly, then re-saving the rule clears state but leaves the record untouched.
 	eval(t, db, sensor, t0, map[string]float64{"temperature": 50})
 	if w := do(r, "/api/alerts/rules/save", strings.Replace(body, `"max_value":30`, `"min_value":-5,"max_value":45`, 1)); w.Code != 204 {
 		t.Fatalf("resave = %d", w.Code)
 	}
-	if n := testutil.Count(t, db, `SELECT count(*) FROM anomalies WHERE status='NORMAL' AND resolved_at IS NOT NULL`); n != 1 {
-		t.Fatalf("resolved anomalies = %d", n)
+	if n := testutil.Count(t, db, `SELECT count(*) FROM anomalies WHERE status='WARNING' AND resolved_at IS NULL`); n != 1 {
+		t.Fatalf("anomalies = %d", n)
 	}
 	if n := testutil.Count(t, db, `SELECT count(*) FROM alert_states`); n != 0 {
 		t.Fatalf("states = %d", n)

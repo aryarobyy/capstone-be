@@ -115,34 +115,41 @@ func TestEvaluateLifecycle(t *testing.T) {
 		t.Fatalf("start not tracked: %+v", s)
 	}
 
-	// Duration reached: WARNING opened with accumulated time since the first breach.
+	// Duration reached: one record for the window since the first breach.
 	eval(t, db, sensor, t0.Add(70*time.Second), map[string]float64{"temperature": 33})
 	a := anomalies(t, db, sensor)
 	if len(a) != 1 || a[0].status != "WARNING" || a[0].duration != 60 || !a[0].started.Equal(t0.Add(10*time.Second)) || !a[0].last.Equal(t0.Add(70*time.Second)) {
 		t.Fatalf("anomalies = %+v", a)
 	}
-	if s := state(t, db, sensor, "temperature"); !s.anomaly.Valid {
-		t.Fatal("state must link the anomaly")
+	if s := state(t, db, sensor, "temperature"); !s.anomaly.Valid || !s.started.Time.Equal(t0.Add(70*time.Second)) {
+		t.Fatalf("state must link the record and start the next window: %+v", s)
 	}
 
-	// Still out: same anomaly updated.
+	// Still out but next window not complete: nothing new, old record untouched.
 	eval(t, db, sensor, t0.Add(100*time.Second), map[string]float64{"temperature": 34})
+	if a = anomalies(t, db, sensor); len(a) != 1 || a[0].duration != 60 || !a[0].last.Equal(t0.Add(70*time.Second)) {
+		t.Fatalf("anomalies = %+v", a)
+	}
+
+	// Next window complete: a new record is appended.
+	eval(t, db, sensor, t0.Add(130*time.Second), map[string]float64{"temperature": 35})
 	a = anomalies(t, db, sensor)
-	if len(a) != 1 || a[0].duration != 90 || !a[0].last.Equal(t0.Add(100*time.Second)) {
+	if len(a) != 2 || a[0].duration != 60 || !a[0].last.Equal(t0.Add(70*time.Second)) ||
+		a[1].status != "WARNING" || a[1].duration != 60 || !a[1].started.Equal(t0.Add(70*time.Second)) || !a[1].last.Equal(t0.Add(130*time.Second)) {
 		t.Fatalf("anomalies = %+v", a)
 	}
 
 	// Out-of-order and duplicate readings never rewind state.
 	eval(t, db, sensor, t0.Add(50*time.Second), map[string]float64{"temperature": 10})
-	eval(t, db, sensor, t0.Add(100*time.Second), map[string]float64{"temperature": 10})
-	if a = anomalies(t, db, sensor); a[0].status != "WARNING" {
-		t.Fatalf("stale reading resolved anomaly: %+v", a)
+	eval(t, db, sensor, t0.Add(130*time.Second), map[string]float64{"temperature": 10})
+	if s := state(t, db, sensor, "temperature"); !s.anomaly.Valid {
+		t.Fatalf("stale reading cleared state: %+v", s)
 	}
 
-	// Back in range: NORMAL with resolved_at, state cleared.
-	eval(t, db, sensor, t0.Add(130*time.Second), map[string]float64{"temperature": 20})
+	// Back in range: records stay as they are, state cleared.
+	eval(t, db, sensor, t0.Add(160*time.Second), map[string]float64{"temperature": 20})
 	a = anomalies(t, db, sensor)
-	if len(a) != 1 || a[0].status != "NORMAL" || !a[0].resolved.Valid || !a[0].resolved.Time.Equal(t0.Add(130*time.Second)) {
+	if len(a) != 2 || a[0].resolved.Valid || a[1].resolved.Valid || !a[1].last.Equal(t0.Add(130*time.Second)) {
 		t.Fatalf("anomalies = %+v", a)
 	}
 	if s := state(t, db, sensor, "temperature"); s.started.Valid || s.anomaly.Valid {
@@ -166,7 +173,7 @@ func TestEvaluateMinBoundAndBoundaries(t *testing.T) {
 	}
 	// A missing parameter is evaluated as 0, which is below min.
 	eval(t, db, sensor, t0.Add(3*time.Second), map[string]float64{})
-	if a := anomalies(t, db, sensor); len(a) != 1 || a[0].duration != 1 {
+	if a := anomalies(t, db, sensor); len(a) != 2 || a[0].duration != 0 || a[1].duration != 1 {
 		t.Fatalf("anomalies = %+v", a)
 	}
 }
@@ -178,14 +185,14 @@ func TestEvaluateGapResetsAnomaly(t *testing.T) {
 
 	eval(t, db, sensor, t0, map[string]float64{"humidity": 95})
 	eval(t, db, sensor, t0.Add(60*time.Second), map[string]float64{"humidity": 95}) // gap == max: continuous
-	if a := anomalies(t, db, sensor); len(a) != 1 || a[0].duration != 60 {
+	if a := anomalies(t, db, sensor); len(a) != 2 || a[1].duration != 60 || !a[1].started.Equal(t0) {
 		t.Fatalf("anomalies = %+v", a)
 	}
-	// Silence longer than max gap closes the old anomaly and starts a fresh one.
+	// Silence longer than max gap restarts the window instead of spanning the silence.
 	at := t0.Add(121 * time.Second)
 	eval(t, db, sensor, at, map[string]float64{"humidity": 95})
 	a := anomalies(t, db, sensor)
-	if len(a) != 2 || a[0].status != "NORMAL" || !a[0].resolved.Time.Equal(at) || a[1].status != "WARNING" || !a[1].started.Equal(at) || a[1].duration != 0 {
+	if len(a) != 3 || a[1].resolved.Valid || !a[2].started.Equal(at) || a[2].duration != 0 {
 		t.Fatalf("anomalies = %+v", a)
 	}
 }

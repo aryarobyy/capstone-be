@@ -50,11 +50,6 @@ func EvaluateTx(ctx context.Context, tx *sql.Tx, sensor int64, at time.Time, val
 		value := values[r.parameter]
 		outside := (r.min.Valid && value < r.min.Float64) || (r.max.Valid && value > r.max.Float64)
 		if !outside || (!last.IsZero() && at.Sub(last) > time.Duration(r.gap)*time.Second) {
-			if anomaly.Valid {
-				if _, err := tx.ExecContext(ctx, `UPDATE anomalies SET status='NORMAL',resolved_at=$2,updated_at=NOW() WHERE id=$1`, anomaly.Int64, at); err != nil {
-					return err
-				}
-			}
 			start = sql.NullTime{}
 			anomaly = sql.NullInt64{}
 		}
@@ -63,17 +58,13 @@ func EvaluateTx(ctx context.Context, tx *sql.Tx, sensor int64, at time.Time, val
 				start = sql.NullTime{Time: at, Valid: true}
 			}
 			duration := int64(at.Sub(start.Time).Seconds())
+			// Every sustained window is its own record; earlier records are never edited.
 			if duration >= int64(r.duration) {
-				if !anomaly.Valid {
-					if err := tx.QueryRowContext(ctx, `INSERT INTO anomalies(sensor_id,parameter,started_at,last_detected_at,accumulated_duration,status) VALUES($1,$2,$3,$4,$5,'WARNING') RETURNING id`, sensor, r.parameter, start.Time, at, duration).Scan(&anomaly.Int64); err != nil {
-						return err
-					}
-					anomaly.Valid = true
-				} else {
-					if _, err := tx.ExecContext(ctx, `UPDATE anomalies SET last_detected_at=$2,accumulated_duration=$3,updated_at=NOW() WHERE id=$1`, anomaly.Int64, at, duration); err != nil {
-						return err
-					}
+				if err := tx.QueryRowContext(ctx, `INSERT INTO anomalies(sensor_id,parameter,started_at,last_detected_at,accumulated_duration,status) VALUES($1,$2,$3,$4,$5,'WARNING') RETURNING id`, sensor, r.parameter, start.Time, at, duration).Scan(&anomaly.Int64); err != nil {
+					return err
 				}
+				anomaly.Valid = true
+				start = sql.NullTime{Time: at, Valid: true}
 				if owner.Valid && (!lastNotice.Valid || at.Sub(lastNotice.Time) >= time.Duration(r.cooldown)*time.Second) {
 					_, err := notification.EnqueueTx(ctx, tx, owner.Int64, notification.PushNotificationPayload{Title: "Peringatan sensor", Body: fmt.Sprintf("Sensor %d: %s = %g di luar batas selama %d detik", sensor, r.parameter, value, duration), Data: map[string]string{"sensor_id": fmt.Sprint(sensor), "parameter": r.parameter, "anomaly_id": fmt.Sprint(anomaly.Int64)}, IdempotencyKey: fmt.Sprintf("sensor:%d:%s:%d", sensor, r.parameter, at.UnixNano())})
 					if err != nil {

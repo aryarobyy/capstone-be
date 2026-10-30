@@ -39,6 +39,10 @@ func (m *mockSensorReadingRepository) CalculateSummary(ctx context.Context, sens
 	return m.summaryItems, m.err
 }
 
+func (m *mockSensorReadingRepository) Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error) {
+	return nil, m.err
+}
+
 func TestSensorReadingService_List_Pagination(t *testing.T) {
 	tests := []struct {
 		name          string

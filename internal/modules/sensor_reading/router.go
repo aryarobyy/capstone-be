@@ -18,5 +18,6 @@ func RegisterRoutes(router *gin.RouterGroup, apiGroup *gin.RouterGroup, db *sql.
 		sensorReadingGroup.POST("/detail", handler.Detail)
 		sensorReadingGroup.POST("/delete", handler.Delete)
 		sensorReadingGroup.POST("/summary", handler.Summary)
+		sensorReadingGroup.POST("/stream", handler.Stream)
 	}
 }

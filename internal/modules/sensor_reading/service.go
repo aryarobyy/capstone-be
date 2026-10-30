@@ -10,6 +10,7 @@ type SensorReadingService interface {
 	Detail(ctx context.Context, req DetailSensorReadingRequest) (*SensorReadingResponse, error)
 	Delete(ctx context.Context, req DeleteSensorReadingRequest) error
 	Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error)
+	Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error)
 }
 
 type sensorReadingService struct {
@@ -89,6 +90,10 @@ func (s *sensorReadingService) Detail(ctx context.Context, req DetailSensorReadi
 
 func (s *sensorReadingService) Delete(ctx context.Context, req DeleteSensorReadingRequest) error {
 	return s.repo.Delete(ctx, req)
+}
+
+func (s *sensorReadingService) Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error) {
+	return s.repo.Since(ctx, req, afterID, limit)
 }
 
 func (s *sensorReadingService) Summary(ctx context.Context, req SensorSummaryRequest, ownerID int64) (*SensorSummaryResponse, error) {

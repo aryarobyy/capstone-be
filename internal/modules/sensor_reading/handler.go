@@ -125,3 +125,50 @@ func (h *SensorReadingHandler) Summary(c *gin.Context) {
 	responsehandler.ToSuccessHandler(c, http.StatusOK, "Sensor reading summary retrieved successfully", res)
 }
 
+const (
+	streamPoll    = 2 * time.Second
+	streamBacklog = 20
+)
+
+// Stream sends the latest readings, then each new one, as Server-Sent Events.
+func (h *SensorReadingHandler) Stream(c *gin.Context) {
+	var req StreamSensorReadingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		responsehandler.ToValidationError(c, err)
+		return
+	}
+	req.OwnerID = middleware.OwnerScope(c)
+
+	ctx := c.Request.Context()
+	rc := http.NewResponseController(c.Writer)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("X-Accel-Buffering", "no") // nginx buffers proxied responses otherwise
+	c.Status(http.StatusOK)
+
+	ticker := time.NewTicker(streamPoll)
+	defer ticker.Stop()
+	var after int64
+	for {
+		rows, err := h.service.Since(ctx, req, after, streamBacklog)
+		if err != nil {
+			return // client reconnects
+		}
+		_ = rc.SetWriteDeadline(time.Now().Add(10 * time.Second)) // server WriteTimeout would cut the stream
+		for _, row := range rows {
+			c.SSEvent("reading", row)
+			after = row.ID
+		}
+		if len(rows) == 0 {
+			_, _ = c.Writer.WriteString(": ping\n\n") // keeps proxies from closing an idle stream
+		}
+		if rc.Flush() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}

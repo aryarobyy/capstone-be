@@ -88,3 +88,19 @@ type SensorSummaryResponse struct {
 	WindowMinutes int                 `json:"window_minutes"`
 	Data          []SensorSummaryItem `json:"data"`
 }
+
+type StreamSensorReadingRequest struct {
+	OwnerID  int64 `json:"-"`
+	SensorID int64 `json:"sensor_id"`
+	AreaID   int64 `json:"area_id"`
+}
+
+type SensorActivity struct {
+	ID           int64     `json:"id"`
+	SensorID     int64     `json:"sensor_id"`
+	SensorName   string    `json:"sensor_name"`
+	SoilMoisture float64   `json:"soil_moisture"`
+	Temperature  float64   `json:"temperature"`
+	Humidity     float64   `json:"humidity"`
+	RecordedAt   time.Time `json:"recorded_at"`
+}

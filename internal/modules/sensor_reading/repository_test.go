@@ -142,7 +142,9 @@ func TestSensorReadingRepository_CalculateSummary(t *testing.T) {
 		(3,10,25,60,$1),
 		(4,40,25,60,$1),
 		(5,40,25,60,$3)`, now.Add(-2*time.Minute), now.Add(-time.Minute), now.Add(-2*time.Hour))
-	testutil.Exec(t, db, `INSERT INTO anomalies(sensor_id,parameter,status) VALUES (4,'temperature','WARNING')`)
+	testutil.Exec(t, db, `INSERT INTO alert_rules(sensor_id,parameter,max_value) VALUES (4,'temperature',30)`)
+	testutil.Exec(t, db, `INSERT INTO anomalies(id,sensor_id,parameter,status) VALUES (40,4,'temperature','WARNING')`)
+	testutil.Exec(t, db, `INSERT INTO alert_states(sensor_id,parameter,last_recorded_at,anomaly_id) VALUES (4,'temperature',NOW(),40)`)
 	repo := NewSensorReadingRepository(db)
 	ctx := context.Background()
 
@@ -182,18 +184,17 @@ func TestSensorReadingRepository_CalculateSummary(t *testing.T) {
 	}
 }
 
-// A CRITICAL/FATAL unresolved anomaly does not flag the sensor as ANOMALY:
-// the query only matches status IN ('WARNING','ANOMALY'), and 'ANOMALY' is not a valid AnomalyStatus.
-func TestSensorReadingRepository_CalculateSummary_CriticalAnomalyIgnored(t *testing.T) {
+// Past anomaly records alone never flag the sensor; only an ongoing streak does.
+func TestSensorReadingRepository_CalculateSummary_PastAnomalyIgnored(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	seedSensors(t, db)
 	testutil.Exec(t, db, `INSERT INTO sensor_readings(sensor_id,soil_moisture,temperature,humidity) VALUES (1,40,25,60)`)
-	testutil.Exec(t, db, `INSERT INTO anomalies(sensor_id,parameter,status) VALUES (1,'temperature','CRITICAL')`)
+	testutil.Exec(t, db, `INSERT INTO anomalies(sensor_id,parameter,status) VALUES (1,'temperature','WARNING')`)
 	got, err := NewSensorReadingRepository(db).CalculateSummary(context.Background(), 1, 0, 10)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("%+v %v", got, err)
 	}
-	if got[0].Status != "OPTIMAL" { // documents current behavior
+	if got[0].Status != "OPTIMAL" {
 		t.Fatalf("status = %s", got[0].Status)
 	}
 }

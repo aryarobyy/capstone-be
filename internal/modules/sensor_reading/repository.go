@@ -21,6 +21,7 @@ type SensorReadingRepository interface {
 	Detail(ctx context.Context, req DetailSensorReadingRequest) (*SensorReading, error)
 	Delete(ctx context.Context, req DeleteSensorReadingRequest) error
 	CalculateSummary(ctx context.Context, sensorID int64, ownerID int64, windowMinutes int) ([]SensorSummaryItem, error)
+	Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error)
 }
 
 type sensorReadingRepository struct {
@@ -320,11 +321,8 @@ func (r *sensorReadingRepository) CalculateSummary(ctx context.Context, sensorID
 
 		if totalSamples > 0 || !latest.RecordedAt.IsZero() {
 			var activeAnomalies int
-			anomalyQuery := `
-				SELECT COUNT(*) 
-				FROM anomalies 
-				WHERE sensor_id = $1 AND status IN ('WARNING', 'ANOMALY') AND resolved_at IS NULL
-			`
+			// Anomaly records are immutable, so "active" means a still-ongoing streak that has produced one.
+			anomalyQuery := `SELECT COUNT(*) FROM alert_states WHERE sensor_id = $1 AND anomaly_id IS NOT NULL`
 			_ = r.db.QueryRowContext(ctx, anomalyQuery, s.id).Scan(&activeAnomalies)
 			if activeAnomalies > 0 {
 				item.Status = "ANOMALY"
@@ -346,4 +344,36 @@ func (r *sensorReadingRepository) CalculateSummary(ctx context.Context, sensorID
 func roundFloat(val float64, precision int) float64 {
 	ratio := math.Pow(10, float64(precision))
 	return math.Round(val*ratio) / ratio
+}
+
+// Since returns up to limit readings with id > afterID, oldest first.
+// ponytail: ids are assigned before commit, so a reading committed late behind a higher id is skipped; re-scan a small id window if that matters.
+func (r *sensorReadingRepository) Since(ctx context.Context, req StreamSensorReadingRequest, afterID int64, limit int) ([]SensorActivity, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT * FROM (
+			SELECT r.id, r.sensor_id, s.name, r.soil_moisture, r.temperature, r.humidity, r.recorded_at
+			FROM sensor_readings r
+			JOIN sensors s ON s.id = r.sensor_id
+			WHERE r.id > $1
+				AND ($2::bigint = 0 OR s.owner_id = $2::bigint)
+				AND ($3::bigint = 0 OR r.sensor_id = $3::bigint)
+				AND ($4::bigint = 0 OR s.area_id = $4::bigint)
+			ORDER BY r.id DESC
+			LIMIT $5
+		) latest ORDER BY id
+	`, afterID, req.OwnerID, req.SensorID, req.AreaID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]SensorActivity, 0)
+	for rows.Next() {
+		var a SensorActivity
+		if err := rows.Scan(&a.ID, &a.SensorID, &a.SensorName, &a.SoilMoisture, &a.Temperature, &a.Humidity, &a.RecordedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
