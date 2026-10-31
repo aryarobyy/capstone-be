@@ -100,6 +100,10 @@ func historyWhere(filter HistoryFilter) (string, []any) {
 	if filter.Date != "" {
 		add("started_at::date = $%d::date", filter.Date)
 	}
+	if filter.Active {
+		// Records are append-only, so "ongoing" means the evaluator still points at it.
+		conditions = append(conditions, "id IN (SELECT anomaly_id FROM alert_states WHERE anomaly_id IS NOT NULL)")
+	}
 
 	if len(conditions) == 0 {
 		return "", args

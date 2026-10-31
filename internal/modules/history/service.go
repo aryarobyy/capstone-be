@@ -57,6 +57,7 @@ func (s *historyService) List(ctx context.Context, req ListHistoryRequest) (*Lis
 		Parameter: req.Parameter,
 		Status:    req.Status,
 		Date:      req.Date,
+		Active:    req.Active,
 		Limit:     limit,
 		Index:     index,
 	})

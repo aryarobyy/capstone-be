@@ -18,8 +18,10 @@ type ListHistoryRequest struct {
 	Parameter string `json:"parameter"`
 	Status    string `json:"status"`
 	Date      string `json:"date"`
-	Limit     int    `json:"limit"`
-	Index     int    `json:"index"`
+	// Active keeps only anomalies of a violation that is still ongoing.
+	Active bool `json:"active"`
+	Limit  int  `json:"limit"`
+	Index  int  `json:"index"`
 }
 
 type HistoryResponse struct {
@@ -64,6 +66,7 @@ type HistoryFilter struct {
 	Parameter string
 	Status    string
 	Date      string
+	Active    bool
 	Limit     int
 	Index     int
 }

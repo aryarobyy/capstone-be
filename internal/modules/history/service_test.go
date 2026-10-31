@@ -263,3 +263,13 @@ func TestHistoryService_Since(t *testing.T) {
 		t.Fatal("expected repo error")
 	}
 }
+
+func TestHistoryService_ListPassesActive(t *testing.T) {
+	repo := &mockHistoryRepository{}
+	if _, err := NewHistoryService(repo).List(context.Background(), ListHistoryRequest{Active: true, Status: "WARNING"}); err != nil {
+		t.Fatal(err)
+	}
+	if !repo.filter.Active || repo.filter.Status != "WARNING" {
+		t.Fatalf("filter = %+v", repo.filter)
+	}
+}

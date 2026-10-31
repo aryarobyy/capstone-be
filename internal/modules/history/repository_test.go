@@ -233,3 +233,37 @@ func TestHistoryRepository_Since(t *testing.T) {
 		t.Error("closed db: expected error")
 	}
 }
+
+func TestHistoryRepository_ListActive(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	repo := NewHistoryRepository(db)
+	ctx := context.Background()
+	testutil.Exec(t, db, `INSERT INTO sensors(id,name) VALUES (1,'s1')`)
+
+	day := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		a, err := repo.Create(ctx, CreateHistoryRequest{SensorID: 1, Parameter: "temperature", StartedAt: day.Add(time.Duration(i) * 5 * time.Minute), Status: AnomalyStatusWarning})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, a.ID)
+	}
+	// The evaluator points alert_states at the newest record of a streak that is still going.
+	testutil.Exec(t, db, `INSERT INTO alert_rules(sensor_id,parameter,max_value) VALUES (1,'temperature',30)`)
+	testutil.Exec(t, db, `INSERT INTO alert_states(sensor_id,parameter,last_recorded_at,anomaly_id) VALUES (1,'temperature',NOW(),$1)`, ids[2])
+
+	got, total, err := repo.List(ctx, HistoryFilter{Active: true, Limit: 10})
+	if err != nil || total != 1 || len(got) != 1 || got[0].ID != ids[2] {
+		t.Fatalf("active: got %+v total=%d err=%v, want only %d", got, total, err, ids[2])
+	}
+	if _, total, _ := repo.List(ctx, HistoryFilter{Limit: 10}); total != 3 {
+		t.Fatalf("without the flag every record is listed, total=%d", total)
+	}
+
+	// The streak ends: the evaluator clears the pointer and nothing is active any more.
+	testutil.Exec(t, db, `UPDATE alert_states SET anomaly_id=NULL`)
+	if _, total, _ := repo.List(ctx, HistoryFilter{Active: true, Limit: 10}); total != 0 {
+		t.Fatalf("ended streak must not be active, total=%d", total)
+	}
+}
