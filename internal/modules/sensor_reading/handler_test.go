@@ -317,3 +317,14 @@ func TestRegisterRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestSensorReadingHandler_StreamInvalidJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/stream", NewSensorReadingHandler(&mockSensorReadingService{}).Stream)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/stream", strings.NewReader(`{`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d", w.Code)
+	}
+}

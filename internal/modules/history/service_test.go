@@ -16,6 +16,11 @@ type mockHistoryRepository struct {
 	createdResult *Anomaly
 }
 
+func (m *mockHistoryRepository) Since(_ context.Context, filter HistoryFilter, _ int64) ([]Anomaly, error) {
+	m.filter = filter
+	return m.histories, m.err
+}
+
 func (m *mockHistoryRepository) Create(_ context.Context, req CreateHistoryRequest) (*Anomaly, error) {
 	m.createdReq = req
 	if m.err != nil {
@@ -233,5 +238,28 @@ func TestAnomalyStatus_IsValid(t *testing.T) {
 	}
 	if AnomalyStatus("warning").IsValid() || AnomalyStatus("").IsValid() {
 		t.Error("lowercase/empty must be invalid")
+	}
+}
+
+func TestHistoryService_Since(t *testing.T) {
+	now := time.Now()
+	repo := &mockHistoryRepository{histories: []Anomaly{{ID: 7, SensorID: 9, Parameter: "soil_moisture", Status: AnomalyStatusWarning, StartedAt: now}}}
+	svc := NewHistoryService(repo)
+
+	got, err := svc.Since(context.Background(), StreamHistoryRequest{OwnerID: 3, SensorID: 9, Parameter: "soil_moisture", Status: "WARNING", Date: "2026-10-31", AfterID: 99}, 5, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFilter := HistoryFilter{OwnerID: 3, SensorID: 9, Parameter: "soil_moisture", Status: "WARNING", Date: "2026-10-31", Limit: 20}
+	if repo.filter != wantFilter {
+		t.Fatalf("filter = %+v, want %+v", repo.filter, wantFilter)
+	}
+	if len(got) != 1 || got[0].ID != 7 || got[0].Parameter != "soil_moisture" || !got[0].StartedAt.Equal(now) {
+		t.Fatalf("got %+v", got)
+	}
+
+	repo.err = errors.New("boom")
+	if _, err := svc.Since(context.Background(), StreamHistoryRequest{}, 0, 1); err == nil {
+		t.Fatal("expected repo error")
 	}
 }

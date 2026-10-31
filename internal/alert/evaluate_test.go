@@ -217,27 +217,20 @@ func TestEvaluateDisabledAndMultipleRules(t *testing.T) {
 	}
 }
 
-func TestEvaluateDoesNotNotify(t *testing.T) {
+func TestEvaluateUnownedSensorDoesNotNotify(t *testing.T) {
 	db := testutil.OpenTestDB(t)
 	sensor := seedSensor(t, db)
-	var owner int64
-	if err := db.QueryRow(`INSERT INTO users(name,email,password) VALUES('o','o@x.io','x') RETURNING id`).Scan(&owner); err != nil {
-		t.Fatal(err)
-	}
-	testutil.Exec(t, db, `UPDATE sensors SET owner_id=$1 WHERE id=$2`, owner, sensor)
 	rule(t, db, sensor, "temperature", nil, f(30), 0, 60, 300, true)
 	eval(t, db, sensor, t0, map[string]float64{"temperature": 40})
-	// Current behaviour: the owner lookup was removed, so no notification is ever enqueued.
 	if n := testutil.Count(t, db, `SELECT count(*) FROM notifications`); n != 0 {
 		t.Fatalf("notifications = %d", n)
 	}
-	if s := state(t, db, sensor, "temperature"); s.notified.Valid {
-		t.Fatal("last_notified_at set without notification")
+	if len(anomalies(t, db, sensor)) != 1 {
+		t.Fatal("history is still recorded without an owner")
 	}
 }
 
 func TestEvaluateNotifiesOwnerWithCooldown(t *testing.T) {
-	t.Skip("BUG: EvaluateTx declares `owner` but never loads it (owner query dropped in 8e05db3), so anomaly notifications and cooldown are dead code")
 	db := testutil.OpenTestDB(t)
 	sensor := seedSensor(t, db)
 	var owner int64
@@ -251,6 +244,9 @@ func TestEvaluateNotifiesOwnerWithCooldown(t *testing.T) {
 	eval(t, db, sensor, t0.Add(60*time.Second), map[string]float64{"temperature": 40})
 	if n := testutil.Count(t, db, `SELECT count(*) FROM notifications WHERE user_id=$1`, owner); n != 2 {
 		t.Fatalf("notifications = %d, want 2", n)
+	}
+	if s := state(t, db, sensor, "temperature"); !s.notified.Valid || !s.notified.Time.Equal(t0.Add(60*time.Second)) {
+		t.Fatalf("state = %+v", s)
 	}
 }
 

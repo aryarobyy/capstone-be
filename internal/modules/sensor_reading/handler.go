@@ -1,6 +1,7 @@
 package sensorreading
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -139,36 +140,9 @@ func (h *SensorReadingHandler) Stream(c *gin.Context) {
 	}
 	req.OwnerID = middleware.OwnerScope(c)
 
-	ctx := c.Request.Context()
-	rc := http.NewResponseController(c.Writer)
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("X-Accel-Buffering", "no") // nginx buffers proxied responses otherwise
-	c.Status(http.StatusOK)
-
-	ticker := time.NewTicker(streamPoll)
-	defer ticker.Stop()
-	var after int64
-	for {
-		rows, err := h.service.Since(ctx, req, after, streamBacklog)
-		if err != nil {
-			return // client reconnects
-		}
-		_ = rc.SetWriteDeadline(time.Now().Add(10 * time.Second)) // server WriteTimeout would cut the stream
-		for _, row := range rows {
-			c.SSEvent("reading", row)
-			after = row.ID
-		}
-		if len(rows) == 0 {
-			_, _ = c.Writer.WriteString(": ping\n\n") // keeps proxies from closing an idle stream
-		}
-		if rc.Flush() != nil {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+	responsehandler.StreamSSE(c, "reading", streamPoll, 0,
+		func(ctx context.Context, after int64) ([]SensorActivity, error) {
+			return h.service.Since(ctx, req, after, streamBacklog)
+		},
+		func(a SensorActivity) int64 { return a.ID })
 }

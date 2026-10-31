@@ -283,3 +283,10 @@ func TestSensorReadingService_SummaryCache(t *testing.T) {
 		t.Fatal("30m window must not be cached")
 	}
 }
+
+func TestSensorReadingService_SinceDelegates(t *testing.T) {
+	repo := &mockSensorReadingRepository{err: errors.New("boom")}
+	if _, err := NewSensorReadingService(repo).Since(context.Background(), StreamSensorReadingRequest{AreaID: 5}, 1, 20); err == nil {
+		t.Fatal("expected repo error")
+	}
+}

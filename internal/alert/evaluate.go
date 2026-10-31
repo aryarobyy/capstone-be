@@ -36,6 +36,12 @@ func EvaluateTx(ctx context.Context, tx *sql.Tx, sensor int64, at time.Time, val
 	if err != nil {
 		return err
 	}
+	if len(rules) == 0 {
+		return nil
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT owner_id FROM sensors WHERE id=$1`, sensor).Scan(&owner); err != nil {
+		return err
+	}
 	for _, r := range rules {
 		var start, lastNotice sql.NullTime
 		var last time.Time

@@ -7,8 +7,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"capstone-be/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +21,26 @@ type mockHistoryService struct {
 	listResponse   *ListHistoryResponse
 	detailResponse *HistoryResponse
 	newestResponse *HistoryResponse
+	streamReq      StreamHistoryRequest
+	sinceAfter     []int64
+	onSince        func()
 	err            error
+}
+
+// Since serves anomaly 5 as the newest existing one and 6 as recorded later.
+func (m *mockHistoryService) Since(_ context.Context, req StreamHistoryRequest, afterID int64, limit int) ([]HistoryResponse, error) {
+	m.streamReq = req
+	m.sinceAfter = append(m.sinceAfter, afterID)
+	if m.err != nil {
+		return nil, m.err
+	}
+	if limit == 1 {
+		return []HistoryResponse{{ID: 5}}, nil
+	}
+	if m.onSince != nil {
+		m.onSince()
+	}
+	return []HistoryResponse{{ID: 6, Parameter: "soil_moisture", Status: AnomalyStatusWarning}}, nil
 }
 
 func (m *mockHistoryService) Create(_ context.Context, _ CreateHistoryRequest) (*HistoryResponse, error) {
@@ -51,6 +73,41 @@ func (m *mockHistoryService) Detail(_ context.Context, _ DetailHistoryRequest) (
 
 func (m *mockHistoryService) Delete(_ context.Context, _ DeleteHistoryRequest) error {
 	return m.err
+}
+
+func TestHistoryHandler_Stream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, cancel := context.WithCancel(context.Background())
+	mockSvc := &mockHistoryService{onSince: cancel} // client leaves after the first poll
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set(middleware.UserIDKey, int64(42)); c.Next() })
+	r.POST("/stream", NewHistoryHandler(mockSvc).Stream)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/stream", strings.NewReader(`{"status":"WARNING"}`)).WithContext(ctx)
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if !strings.Contains(body, "event:anomaly") || !strings.Contains(body, `"id":6`) || strings.Contains(body, `"id":5`) {
+		t.Fatalf("existing anomaly must be skipped, new one sent: %q", body)
+	}
+	if len(mockSvc.sinceAfter) != 2 || mockSvc.sinceAfter[1] != 5 {
+		t.Fatalf("since calls = %v", mockSvc.sinceAfter)
+	}
+	if mockSvc.streamReq.Status != "WARNING" || mockSvc.streamReq.OwnerID != 42 {
+		t.Fatalf("req = %+v", mockSvc.streamReq)
+	}
+
+	// Reconnect with after_id resumes there instead of skipping to the newest.
+	ctx, cancel = context.WithCancel(context.Background())
+	mockSvc = &mockHistoryService{onSince: cancel}
+	r = gin.New()
+	r.Use(func(c *gin.Context) { c.Set(middleware.UserIDKey, int64(42)); c.Next() })
+	r.POST("/stream", NewHistoryHandler(mockSvc).Stream)
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/stream", strings.NewReader(`{"after_id":3}`)).WithContext(ctx))
+	if len(mockSvc.sinceAfter) != 1 || mockSvc.sinceAfter[0] != 3 {
+		t.Fatalf("since calls = %v", mockSvc.sinceAfter)
+	}
 }
 
 func TestHistoryHandler_Create(t *testing.T) {
@@ -268,5 +325,28 @@ func TestRegisterRoutes(t *testing.T) {
 		if !got["POST /api/history/"+p] {
 			t.Errorf("missing route POST /api/history/%s", p)
 		}
+	}
+}
+
+func TestHistoryHandler_StreamErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		name string
+		body string
+		err  error
+		code int
+	}{
+		{"invalid json", `{`, nil, http.StatusBadRequest},
+		{"cannot find newest", `{}`, errors.New("db down"), http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := gin.New()
+			r.POST("/stream", NewHistoryHandler(&mockHistoryService{err: tc.err}).Stream)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/stream", strings.NewReader(tc.body)))
+			if w.Code != tc.code || strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+				t.Fatalf("code=%d headers=%v", w.Code, w.Header())
+			}
+		})
 	}
 }

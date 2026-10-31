@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -236,5 +237,56 @@ func TestSensorReadingRepository_OwnerScope(t *testing.T) {
 	}
 	if _, err := repo.CalculateSummary(ctx, 0, 0, 10); err != nil {
 		t.Fatalf("summary with unowned sensor: %v", err)
+	}
+}
+
+func TestSensorReadingRepository_Since(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	seedSensors(t, db) // s1: area 5 owner 1, s2: area 0 owner 1, s3: owner 2
+	at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+	testutil.Exec(t, db, `INSERT INTO sensor_readings(id,sensor_id,soil_moisture,temperature,humidity,recorded_at) VALUES
+		(101,1,2559,0,0,$1),(102,2,0,29.5,0,$1),(103,3,0,0,69,$1),(104,1,2600,0,0,$2)`, at, at.Add(10*time.Second))
+	repo := NewSensorReadingRepository(db)
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name  string
+		req   StreamSensorReadingRequest
+		after int64
+		limit int
+		want  []int64
+	}{
+		{"owner scope, oldest first", StreamSensorReadingRequest{OwnerID: 1}, 0, 20, []int64{101, 102, 104}},
+		{"area", StreamSensorReadingRequest{OwnerID: 1, AreaID: 5}, 0, 20, []int64{101, 104}},
+		{"sensor", StreamSensorReadingRequest{OwnerID: 2, SensorID: 3}, 0, 20, []int64{103}},
+		{"owner cannot see others", StreamSensorReadingRequest{OwnerID: 2, SensorID: 1}, 0, 20, []int64{}},
+		{"after id", StreamSensorReadingRequest{OwnerID: 1}, 101, 20, []int64{102, 104}},
+		{"limit keeps the newest", StreamSensorReadingRequest{OwnerID: 1}, 0, 2, []int64{102, 104}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, err := repo.Since(ctx, tc.req, tc.after, tc.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make([]int64, 0, len(rows))
+			for _, r := range rows {
+				got = append(got, r.ID)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	rows, err := repo.Since(ctx, StreamSensorReadingRequest{SensorID: 1}, 103, 20)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("%+v %v", rows, err)
+	}
+	if r := rows[0]; r.SensorName != "s1" || r.SoilMoisture != 2600 || !r.RecordedAt.Equal(at.Add(10*time.Second)) {
+		t.Fatalf("row = %+v", r)
+	}
+
+	if _, err := NewSensorReadingRepository(closedDB(t)).Since(ctx, StreamSensorReadingRequest{}, 0, 1); err == nil {
+		t.Error("closed db: expected error")
 	}
 }

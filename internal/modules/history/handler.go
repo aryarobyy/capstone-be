@@ -1,8 +1,10 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"capstone-be/internal/middleware"
 	responsehandler "capstone-be/internal/utils"
@@ -99,6 +101,35 @@ func (h *HistoryHandler) Delete(c *gin.Context) {
 	}
 
 	responsehandler.ToSuccessHandler[any](c, http.StatusOK, "History deleted successfully", nil)
+}
+
+const historyStreamPoll = 2 * time.Second
+
+func (h *HistoryHandler) Stream(c *gin.Context) {
+	var req StreamHistoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		responsehandler.ToValidationError(c, err)
+		return
+	}
+	req.OwnerID = middleware.OwnerScope(c)
+
+	after := req.AfterID
+	if after <= 0 {
+		latest, err := h.service.Since(c.Request.Context(), req, 0, 1)
+		if err != nil {
+			responsehandler.ToErrorHandler(c, http.StatusInternalServerError, "Failed to open history stream", err)
+			return
+		}
+		if len(latest) > 0 {
+			after = latest[0].ID
+		}
+	}
+
+	responsehandler.StreamSSE(c, "anomaly", historyStreamPoll, after,
+		func(ctx context.Context, after int64) ([]HistoryResponse, error) {
+			return h.service.Since(ctx, req, after, 20)
+		},
+		func(a HistoryResponse) int64 { return a.ID })
 }
 
 func handleHistoryError(c *gin.Context, err error, message string) {

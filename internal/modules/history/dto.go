@@ -67,3 +67,12 @@ type HistoryFilter struct {
 	Limit     int
 	Index     int
 }
+
+type StreamHistoryRequest struct {
+	OwnerID   int64  `json:"-"`
+	SensorID  int64  `json:"sensor_id"`
+	Parameter string `json:"parameter"`
+	Status    string `json:"status"`
+	Date      string `json:"date"`
+	AfterID   int64  `json:"after_id"`
+}

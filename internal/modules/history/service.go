@@ -8,6 +8,7 @@ type HistoryService interface {
 	Newest(ctx context.Context, req NewestHistoryRequest) (*HistoryResponse, error)
 	Detail(ctx context.Context, req DetailHistoryRequest) (*HistoryResponse, error)
 	Delete(ctx context.Context, req DeleteHistoryRequest) error
+	Since(ctx context.Context, req StreamHistoryRequest, afterID int64, limit int) ([]HistoryResponse, error)
 }
 
 type historyService struct {
@@ -98,6 +99,26 @@ func (s *historyService) Detail(ctx context.Context, req DetailHistoryRequest) (
 
 func (s *historyService) Delete(ctx context.Context, req DeleteHistoryRequest) error {
 	return s.repo.Delete(ctx, req)
+}
+
+func (s *historyService) Since(ctx context.Context, req StreamHistoryRequest, afterID int64, limit int) ([]HistoryResponse, error) {
+	histories, err := s.repo.Since(ctx, HistoryFilter{
+		OwnerID:   req.OwnerID,
+		SensorID:  req.SensorID,
+		Parameter: req.Parameter,
+		Status:    req.Status,
+		Date:      req.Date,
+		Limit:     limit,
+	}, afterID)
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]HistoryResponse, 0, len(histories))
+	for _, anomaly := range histories {
+		data = append(data, toHistoryResponse(&anomaly))
+	}
+	return data, nil
 }
 
 func toHistoryResponse(anomaly *Anomaly) HistoryResponse {

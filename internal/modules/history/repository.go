@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrHistoryNotFound     = errors.New("history not found")
+	ErrHistoryNotFound      = errors.New("history not found")
 	ErrInvalidAnomalyStatus = errors.New("invalid anomaly status")
 )
 
@@ -19,6 +19,7 @@ type HistoryRepository interface {
 	Newest(ctx context.Context, req NewestHistoryRequest) (*Anomaly, error)
 	Detail(ctx context.Context, req DetailHistoryRequest) (*Anomaly, error)
 	Delete(ctx context.Context, req DeleteHistoryRequest) error
+	Since(ctx context.Context, filter HistoryFilter, afterID int64) ([]Anomaly, error)
 }
 
 type historyRepository struct {
@@ -75,41 +76,40 @@ func (r *historyRepository) Create(ctx context.Context, req CreateHistoryRequest
 	return &anomaly, nil
 }
 
-func (r *historyRepository) List(ctx context.Context, filter HistoryFilter) ([]Anomaly, int, error) {
-	conditions := make([]string, 0, 4)
-	args := make([]any, 0, 6)
-	argIdx := 1
+// historyWhere builds the WHERE clause shared by List and Since.
+func historyWhere(filter HistoryFilter) (string, []any) {
+	conditions := make([]string, 0, 5)
+	args := make([]any, 0, 7)
+	add := func(cond string, arg any) {
+		args = append(args, arg)
+		conditions = append(conditions, fmt.Sprintf(cond, len(args)))
+	}
 
 	if filter.OwnerID != 0 {
-		conditions = append(conditions, fmt.Sprintf("sensor_id IN (SELECT id FROM sensors WHERE owner_id = $%d)", argIdx))
-		args = append(args, filter.OwnerID)
-		argIdx++
+		add("sensor_id IN (SELECT id FROM sensors WHERE owner_id = $%d)", filter.OwnerID)
 	}
 	if filter.SensorID != 0 {
-		conditions = append(conditions, fmt.Sprintf("sensor_id = $%d", argIdx))
-		args = append(args, filter.SensorID)
-		argIdx++
+		add("sensor_id = $%d", filter.SensorID)
 	}
 	if filter.Parameter != "" {
-		conditions = append(conditions, fmt.Sprintf("parameter = $%d", argIdx))
-		args = append(args, filter.Parameter)
-		argIdx++
+		add("parameter = $%d", filter.Parameter)
 	}
 	if filter.Status != "" {
-		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
-		args = append(args, filter.Status)
-		argIdx++
+		add("status = $%d", filter.Status)
 	}
 	if filter.Date != "" {
-		conditions = append(conditions, fmt.Sprintf("started_at::date = $%d::date", argIdx))
-		args = append(args, filter.Date)
-		argIdx++
+		add("started_at::date = $%d::date", filter.Date)
 	}
 
-	whereClause := ""
-	if len(conditions) > 0 {
-		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	if len(conditions) == 0 {
+		return "", args
 	}
+	return "WHERE " + strings.Join(conditions, " AND "), args
+}
+
+func (r *historyRepository) List(ctx context.Context, filter HistoryFilter) ([]Anomaly, int, error) {
+	whereClause, args := historyWhere(filter)
+	argIdx := len(args) + 1
 
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM anomalies %s", whereClause)
 	var total int
@@ -233,6 +233,53 @@ func (r *historyRepository) Delete(ctx context.Context, req DeleteHistoryRequest
 	}
 
 	return nil
+}
+
+func (r *historyRepository) Since(ctx context.Context, filter HistoryFilter, afterID int64) ([]Anomaly, error) {
+	whereClause, args := historyWhere(filter)
+	args = append(args, afterID, filter.Limit)
+	idCond := fmt.Sprintf("id > $%d", len(args)-1)
+	if whereClause == "" {
+		whereClause = "WHERE " + idCond
+	} else {
+		whereClause += " AND " + idCond
+	}
+
+	query := fmt.Sprintf(`
+		SELECT * FROM (
+			SELECT
+				id,
+				sensor_id,
+				parameter,
+				started_at,
+				last_detected_at,
+				accumulated_duration,
+				status,
+				resolved_at,
+				created_at,
+				updated_at
+			FROM anomalies
+			%s
+			ORDER BY id DESC
+			LIMIT $%d
+		) latest ORDER BY id
+	`, whereClause, len(args))
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	histories := make([]Anomaly, 0)
+	for rows.Next() {
+		var anomaly Anomaly
+		if err := scanAnomaly(rows, &anomaly); err != nil {
+			return nil, err
+		}
+		histories = append(histories, anomaly)
+	}
+	return histories, rows.Err()
 }
 
 type anomalyScanner interface {

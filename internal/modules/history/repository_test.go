@@ -159,3 +159,77 @@ func TestHistoryRepository_OwnerScope(t *testing.T) {
 		t.Fatalf("owner delete: %v", err)
 	}
 }
+
+func TestHistoryRepository_Since(t *testing.T) {
+	db := testutil.OpenTestDB(t)
+	repo := NewHistoryRepository(db)
+	ctx := context.Background()
+	testutil.Exec(t, db, `INSERT INTO users(id,name,email,password) VALUES (1,'a','a@x.io','x'),(2,'b','b@x.io','x')`)
+	testutil.Exec(t, db, `INSERT INTO sensors(id,name,owner_id) VALUES (1,'s1',1),(2,'s2',2)`)
+
+	day := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC)
+	ids := map[string]int64{}
+	for _, r := range []struct {
+		key    string
+		sensor int64
+		param  string
+		status AnomalyStatus
+		at     time.Time
+	}{
+		{"a", 1, "temperature", AnomalyStatusWarning, day},
+		{"b", 1, "soil_moisture", AnomalyStatusWarning, day},
+		{"c", 2, "temperature", AnomalyStatusWarning, day},
+		{"d", 1, "temperature", AnomalyStatusCritical, day.Add(24 * time.Hour)},
+	} {
+		a, err := repo.Create(ctx, CreateHistoryRequest{SensorID: r.sensor, Parameter: r.param, StartedAt: r.at, LastDetectedAt: r.at, Status: r.status})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[r.key] = a.ID
+	}
+	want := func(keys ...string) []int64 {
+		out := make([]int64, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, ids[k])
+		}
+		return out
+	}
+
+	for _, tc := range []struct {
+		name  string
+		f     HistoryFilter
+		after int64
+		want  []int64
+	}{
+		{"no filter, oldest first", HistoryFilter{Limit: 10}, 0, want("a", "b", "c", "d")},
+		{"limit keeps the newest", HistoryFilter{Limit: 2}, 0, want("c", "d")},
+		{"after id", HistoryFilter{Limit: 10}, ids["b"], want("c", "d")},
+		{"owner scope", HistoryFilter{OwnerID: 1, Limit: 10}, 0, want("a", "b", "d")},
+		{"owner cannot see others", HistoryFilter{OwnerID: 2, SensorID: 1, Limit: 10}, 0, want()},
+		{"all filters combined", HistoryFilter{OwnerID: 1, SensorID: 1, Parameter: "temperature", Status: "WARNING", Date: "2026-09-01", Limit: 10}, 0, want("a")},
+		{"nothing newer", HistoryFilter{Limit: 10}, ids["d"], want()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rows, err := repo.Since(ctx, tc.f, tc.after)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make([]int64, 0, len(rows))
+			for _, r := range rows {
+				got = append(got, r.ID)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+
+	if _, err := NewHistoryRepository(closedDB(t)).Since(ctx, HistoryFilter{Limit: 1}, 0); err == nil {
+		t.Error("closed db: expected error")
+	}
+}
